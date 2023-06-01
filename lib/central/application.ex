@@ -21,30 +21,11 @@ defmodule Central.Application do
         # Start the endpoint when the application starts
         CentralWeb.Endpoint,
         CentralWeb.Presence,
+        Teiserver.Data.CacheSupervisor,
         {Central.General.CacheClusterServer, name: Central.General.CacheClusterServer},
-        concache_sup(:codes),
-        concache_sup(:account_user_cache),
-        concache_sup(:account_user_cache_bang),
-        concache_sup(:account_membership_cache),
 
-        # Store refers to something that is typically only updated at startup
-        # and should not be clustered
-        concache_perm_sup(:recently_used_cache),
-        concache_perm_sup(:auth_group_store),
-        concache_perm_sup(:group_type_store),
-        concache_perm_sup(:restriction_lookup_store),
-        concache_perm_sup(:config_user_type_store),
-        concache_perm_sup(:config_site_type_store),
-        concache_perm_sup(:config_site_cache),
-        concache_perm_sup(:application_metadata_cache),
-        concache_sup(:application_temp_cache),
-        concache_sup(:config_user_cache),
-        concache_sup(:communication_user_notifications),
         {Oban, oban_config()},
 
-        # Tachyon schemas
-        concache_perm_sup(:tachyon_schemas),
-        concache_perm_sup(:tachyon_dispatches),
 
         # Teiserver stuff
         # Global/singleton registries
@@ -64,43 +45,6 @@ defmodule Central.Application do
         {Registry, keys: :duplicate, name: Teiserver.LocalPoolRegistry},
         {Registry, keys: :duplicate, name: Teiserver.LocalServerRegistry},
 
-        # Stores - Tables where changes are not propagated across the cluster
-        # Possible stores
-        concache_perm_sup(:teiserver_queues),
-        concache_perm_sup(:lobby_policies_cache),
-
-        # Telemetry
-        concache_perm_sup(:teiserver_telemetry_event_types),
-        concache_perm_sup(:teiserver_telemetry_property_types),
-        concache_perm_sup(:teiserver_telemetry_game_event_types),
-        concache_perm_sup(:teiserver_account_smurf_key_types),
-        concache_sup(:teiserver_user_ratings, global_ttl: 60_000),
-        concache_sup(:teiserver_game_rating_types, global_ttl: 60_000),
-
-        # Caches
-        # Caches - Meta
-        concache_perm_sup(:lists),
-
-        # Caches - User
-        # concache_sup(:users_lookup_name_with_id, [global_ttl: 300_000]),
-        # concache_sup(:users_lookup_id_with_name, [global_ttl: 300_000]),
-        # concache_sup(:users_lookup_id_with_email, [global_ttl: 300_000]),
-        # concache_sup(:users_lookup_id_with_discord, [global_ttl: 300_000]),
-        # concache_sup(:users, [global_ttl: 300_000]),
-
-        concache_perm_sup(:users_lookup_name_with_id),
-        concache_perm_sup(:users_lookup_id_with_name),
-        concache_perm_sup(:users_lookup_id_with_email),
-        concache_perm_sup(:users_lookup_id_with_discord),
-        concache_perm_sup(:users),
-        concache_sup(:teiserver_login_count, global_ttl: 10_000),
-        concache_sup(:teiserver_user_stat_cache),
-
-        # Caches - Battle/Queue/Clan
-        concache_sup(:teiserver_clan_cache_bang),
-
-        # Caches - Chat
-        concache_perm_sup(:rooms),
         {Teiserver.HookServer, name: Teiserver.HookServer},
 
         # Liveview throttles
@@ -110,8 +54,6 @@ defmodule Central.Application do
 
         # Bridge
         Teiserver.Bridge.BridgeServer,
-        concache_sup(:discord_bridge_dm_cache),
-        concache_sup(:discord_bridge_account_codes, global_ttl: 300_000),
 
         # Lobbies
         {DynamicSupervisor, strategy: :one_for_one, name: Teiserver.LobbySupervisor},
@@ -139,10 +81,6 @@ defmodule Central.Application do
 
         # Telemetry
         {Teiserver.Telemetry.TelemetryServer, name: Teiserver.Telemetry.TelemetryServer},
-
-        # Text callbacks
-        concache_perm_sup(:text_callback_trigger_lookup),
-        concache_perm_sup(:text_callback_store),
 
         # Ranch servers
         %{
@@ -191,34 +129,6 @@ defmodule Central.Application do
     else
       []
     end
-  end
-
-  defp concache_sup(name, opts \\ []) do
-    Supervisor.child_spec(
-      {
-        ConCache,
-        [
-          name: name,
-          ttl_check_interval: 10_000,
-          global_ttl: opts[:global_ttl] || 60_000,
-          touch_on_read: true
-        ]
-      },
-      id: {ConCache, name}
-    )
-  end
-
-  defp concache_perm_sup(name) do
-    Supervisor.child_spec(
-      {
-        ConCache,
-        [
-          name: name,
-          ttl_check_interval: false
-        ]
-      },
-      id: {ConCache, name}
-    )
   end
 
   def startup_sub_functions({:error, _}), do: :error

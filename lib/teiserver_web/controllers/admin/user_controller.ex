@@ -530,7 +530,7 @@ defmodule TeiserverWeb.Admin.UserController do
               {:ok, ""}
 
             "reset_flood_protection" ->
-              ConCache.put(:teiserver_login_count, user.id, 0)
+              Central.store_put(:teiserver_login_count, user.id, 0)
               {:ok, ""}
           end
 

@@ -34,6 +34,6 @@ defmodule Teiserver.Tachyon.Schema do
   end
 
   defp get_schema(command) do
-    ConCache.get(:tachyon_schemas, command)
+    Central.store_get(:tachyon_schemas, command)
   end
 end

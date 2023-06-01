@@ -77,7 +77,7 @@ defmodule Central.MixProject do
       {:human_time, "~> 0.3.0"},
       {:oban, "~> 2.14"},
       {:parallel, "~> 0.0"},
-      {:con_cache, "~> 1.0"},
+      {:cachex, "~> 3.6"},
       {:phoenix_pubsub, "~> 2.0"},
       {:elixir_uuid, "~> 1.2"},
       {:excoveralls, "~> 0.15.3", only: :test},

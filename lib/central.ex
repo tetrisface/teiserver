@@ -4,11 +4,21 @@ defmodule Central do
   """
 
   @spec cache_get(atom, any) :: any
-  def cache_get(table, key), do: ConCache.get(table, key)
+  def cache_get(table, key) do
+    {:ok, value} = Cachex.get(table, key)
+    value
+  end
+  # def cache_get(table, key), do: Cachex.get(table, key)
 
   @spec cache_get_or_store(atom, any, function) :: any
   def cache_get_or_store(table, key, func) do
-    ConCache.get_or_store(table, key, func)
+    case Cachex.fetch(table, key, func) do
+      {:ok, value} ->
+        value
+
+      {:commit, value} ->
+        value
+    end
   end
 
   @doc """
@@ -18,7 +28,7 @@ defmodule Central do
   def cache_delete(table, keys) when is_list(keys) do
     keys
     |> Enum.each(fn key ->
-      ConCache.delete(table, key)
+      Cachex.del(table, key)
     end)
 
     Phoenix.PubSub.broadcast(
@@ -35,7 +45,7 @@ defmodule Central do
   """
   @spec cache_put(atom, any, any) :: :ok | {:error, any}
   def cache_put(table, key, value) do
-    ConCache.put(table, key, value)
+    Cachex.put(table, key, value)
 
     Phoenix.PubSub.broadcast(
       Central.PubSub,
@@ -49,7 +59,7 @@ defmodule Central do
   """
   @spec cache_insert_new(atom, any, any) :: :ok | {:error, any}
   def cache_insert_new(table, key, value) do
-    ConCache.insert_new(table, key, value)
+    {:ok, _value} = Cachex.put(table, key, value)
 
     Phoenix.PubSub.broadcast(
       Central.PubSub,
@@ -63,7 +73,7 @@ defmodule Central do
   """
   @spec cache_update(atom, any, any) :: :ok | {:error, any}
   def cache_update(table, key, func) do
-    ConCache.update(table, key, func)
+    Cachex.update(table, key, func)
 
     Phoenix.PubSub.broadcast(
       Central.PubSub,
@@ -74,22 +84,32 @@ defmodule Central do
 
   # Stores
   @spec store_get(atom, any) :: any
-  def store_get(table, key), do: Central.cache_get(table, key)
+  def store_get(table, key) do
+    Central.cache_get(table, key)
+  end
 
   @spec store_delete(atom, any) :: :ok
-  def store_delete(table, key), do: ConCache.delete(table, key)
+  def store_delete(table, key), do: Cachex.del(table, key)
 
   @spec store_put(atom, any, any) :: :ok
-  def store_put(table, key, value), do: ConCache.put(table, key, value)
+  def store_put(table, key, value), do: Cachex.put(table, key, value)
 
   @spec store_insert_new(atom, any, any) :: :ok
-  def store_insert_new(table, key, value), do: ConCache.put(table, key, value)
+  def store_insert_new(table, key, value) do
+    Cachex.put(table, key, value)
+  end
 
   @spec store_update(atom, any, function()) :: :ok
-  def store_update(table, key, func), do: ConCache.update(table, key, func)
+  def store_update(table, key, func), do: Cachex.update(table, key, func)
 
   @spec store_get_or_store(atom, any, function) :: any
   def store_get_or_store(table, key, func) do
-    ConCache.get_or_store(table, key, func)
+    case Cachex.fetch(table, key, func) do
+      {:ok, value} ->
+        value
+
+      {:commit, value} ->
+        value
+    end
   end
 end
