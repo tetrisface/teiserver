@@ -1,0 +1,32 @@
+version: "3.3"
+services:
+  teiserver:
+    container_name: teiserver
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+    env_file:
+      - app.env
+  db:
+    container_name: db
+    image: postgres:latest
+
+    restart: always
+    env_file:
+      - app.env
+    # volumes:
+    #   - ./dev.sql:/docker-entrypoint-initdb.d/dev.sql
+    ports:
+      - "5432:5432"
+
+  # adminer:
+  #   image: adminer
+  #   restart: always
+  #   ports:
+  #     - 8080:8080

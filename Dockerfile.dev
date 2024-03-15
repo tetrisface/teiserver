@@ -1,0 +1,25 @@
+FROM elixir:1.14.3
+
+ARG env=dev
+ENV LANG=en_US.UTF-8 \
+    TERM=xterm \
+    MIX_ENV=$env
+
+RUN apt -y update
+RUN apt -y install build-essential inotify-tools postgresql-client
+RUN apt -y clean
+
+COPY . /app
+WORKDIR /app
+
+RUN mix local.hex --force
+RUN mix local.hex --if-missing --force
+RUN mix local.rebar --force
+
+RUN mix deps.get
+RUN mix deps.compile
+RUN mix sass.install
+
+EXPOSE 4000
+
+CMD ["/app/entrypoint.sh"]
