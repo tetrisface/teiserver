@@ -12,6 +12,7 @@ defmodule Teiserver.Client do
   alias Teiserver.{Room, CacheUser, Account, Telemetry, Clans, Coordinator}
   alias Teiserver.Lobby
   alias Teiserver.Account.ClientLib
+  alias Teiserver.Account.Caches.ClientStateCache
   # alias Teiserver.Helper.TimexHelper
   require Logger
 
@@ -291,6 +292,9 @@ defmodule Teiserver.Client do
     else
       Telemetry.increment(:users_disconnected)
     end
+
+    # Delete from cache
+    ClientStateCache.delete(client.userid)
 
     # Kill lobby server process
     ClientLib.stop_client_server(client.userid)

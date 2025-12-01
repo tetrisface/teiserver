@@ -35,6 +35,7 @@ defmodule Teiserver.Application do
         Teiserver.Repo,
         TeiserverWeb.Presence,
         {Teiserver.General.CacheClusterServer, name: Teiserver.General.CacheClusterServer},
+        Teiserver.Account.Caches.ClientStateCache,
         {Oban, oban_config()},
 
         # Store refers to something that is typically only updated at startup
@@ -193,7 +194,7 @@ defmodule Teiserver.Application do
 
     # We use a logger.error to ensure something appears even on the error logs
     # and we can be sure they're being written to
-    Logger.error("Teiserver.Supervisor start result: #{Kernel.inspect(start_result)}")
+    Logger.error("Error log test: Teiserver.Supervisor start result: #{Kernel.inspect(start_result)}")
 
     startup_sub_functions(start_result)
 

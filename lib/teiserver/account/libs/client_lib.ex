@@ -2,6 +2,7 @@ defmodule Teiserver.Account.ClientLib do
   alias Phoenix.PubSub
   alias Teiserver.{Account, Battle}
   alias Teiserver.Data.Types, as: T
+  alias Teiserver.Account.Caches.ClientStateCache
 
   @spec colours() :: atom
   def colours, do: :primary
@@ -25,7 +26,15 @@ defmodule Teiserver.Account.ClientLib do
   def get_client_by_id(nil), do: nil
 
   def get_client_by_id(userid) do
-    call_client(userid, :get_client_state)
+    # Try fast ETS cache first
+    case ClientStateCache.get(userid) do
+      nil ->
+        # Fallback to GenServer call if not in cache (e.g., during startup)
+        call_client(userid, :get_client_state)
+
+      client ->
+        client
+    end
   end
 
   @spec get_clients([T.userid()]) :: List.t()

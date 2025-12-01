@@ -4,9 +4,12 @@ defmodule Teiserver.Account.ClientServer do
   require Logger
   alias Teiserver.Lobby.ChatLib
   alias Phoenix.PubSub
+  alias Teiserver.Account.Caches.ClientStateCache
 
   @impl true
   def handle_call(:get_client_state, _from, state) do
+    # Also update cache for fast lookups
+    ClientStateCache.put(state.userid, state.client)
     {:reply, state.client, state}
   end
 
@@ -78,6 +81,9 @@ defmodule Teiserver.Account.ClientServer do
       }
     )
 
+    # Update cache
+    ClientStateCache.put(state.userid, new_client)
+
     {:reply, :ok, %{state | client: new_client}}
   end
 
@@ -110,6 +116,9 @@ defmodule Teiserver.Account.ClientServer do
       )
     end
 
+    # Update cache
+    ClientStateCache.put(state.userid, new_client)
+
     {:noreply, %{state | client: new_client}}
   end
 
@@ -141,6 +150,9 @@ defmodule Teiserver.Account.ClientServer do
         }
       )
     end
+
+    # Update cache
+    ClientStateCache.put(state.userid, new_client)
 
     {:noreply, %{state | client: new_client}}
   end
@@ -176,28 +188,35 @@ defmodule Teiserver.Account.ClientServer do
       }
     )
 
+    # Update cache
+    ClientStateCache.put(state.userid, new_client)
+
     {:noreply, %{state | client: new_client}}
   end
 
   def handle_cast({:add_to_queue, queue_id}, state) do
     new_queues = [queue_id | state.client.queues] |> Enum.uniq()
     new_client = Map.merge(state.client, %{queues: new_queues})
+    ClientStateCache.put(state.userid, new_client)
     {:noreply, %{state | client: new_client}}
   end
 
   def handle_cast({:remove_from_queue, queue_id}, state) do
     new_queues = state.client.queues |> List.delete(queue_id)
     new_client = Map.merge(state.client, %{queues: new_queues})
+    ClientStateCache.put(state.userid, new_client)
     {:noreply, %{state | client: new_client}}
   end
 
   def handle_cast(:remove_from_all_queues, state) do
     new_client = Map.merge(state.client, %{queues: []})
+    ClientStateCache.put(state.userid, new_client)
     {:noreply, %{state | client: new_client}}
   end
 
   def handle_cast({:update_tcp_pid, new_pid}, state) do
     new_client = Map.merge(state.client, %{tcp_pid: new_pid})
+    ClientStateCache.put(state.userid, new_client)
     {:noreply, %{state | client: new_client}}
   end
 
@@ -205,9 +224,11 @@ defmodule Teiserver.Account.ClientServer do
   def handle_info(:heartbeat, %{client: client_state} = state) do
     cond do
       client_state.tcp_pid == nil ->
+        ClientStateCache.delete(state.userid)
         DynamicSupervisor.terminate_child(Teiserver.ClientSupervisor, self())
 
       Process.alive?(client_state.tcp_pid) == false ->
+        ClientStateCache.delete(state.userid)
         DynamicSupervisor.terminate_child(Teiserver.ClientSupervisor, self())
 
       true ->
@@ -234,6 +255,9 @@ defmodule Teiserver.Account.ClientServer do
       userid,
       state.client.lobby_client
     )
+
+    # Initialize cache
+    ClientStateCache.put(userid, state.client)
 
     {:ok,
      Map.merge(state, %{
