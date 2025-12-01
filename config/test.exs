@@ -5,10 +5,10 @@ config :argon2_elixir, t_cost: 1, m_cost: 8
 
 # Configure your database
 config :teiserver, Teiserver.Repo,
-  username: "teiserver_test",
-  password: "123456789",
-  database: "teiserver_test",
-  hostname: "localhost",
+  username: System.get_env("POSTGRES_USER") || "teiserver_test",
+  password: System.get_env("POSTGRES_PASSWORD") || "123456789",
+  database: System.get_env("POSTGRES_DB") || "teiserver_test",
+  hostname: System.get_env("POSTGRES_HOSTNAME") || "localhost",
   queue_target: 5000,
   queue_interval: 100_000,
   pool: Ecto.Adapters.SQL.Sandbox,

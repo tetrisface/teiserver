@@ -1,0 +1,32 @@
+# Elixir
+/_build/
+/deps/
+*.ez
+
+# Database
+*.dump
+*.sql
+
+# Logs
+erl_crash.dump
+*.log
+
+# Environment files
+.env
+.env.*
+runtime/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
