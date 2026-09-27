@@ -44,13 +44,16 @@ config :teiserver,
 default_mfa_requirement =
   Application.get_env(:teiserver, Teiserver)[:require_mfa_for_privileged_roles]
 
+# The game and community this server is for; another community sets its own.
 config :teiserver, Teiserver,
-  game_name: "Beyond All Reason",
-  game_name_short: "BAR",
-  main_website: "https://www.beyondallreason.info/",
-  privacy_email: "privacy@beyondallreason.info",
+  game_name: Teiserver.ConfigHelpers.get_env("TEI_GAME_NAME", "Beyond All Reason"),
+  game_name_short: Teiserver.ConfigHelpers.get_env("TEI_GAME_NAME_SHORT", "BAR"),
+  main_website:
+    Teiserver.ConfigHelpers.get_env("TEI_MAIN_WEBSITE", "https://www.beyondallreason.info/"),
+  privacy_email:
+    Teiserver.ConfigHelpers.get_env("TEI_PRIVACY_EMAIL", "privacy@beyondallreason.info"),
   website: [
-    url: "beyondallreason.info"
+    url: domain_name
   ],
   server_flag: "GB-WLS",
   enable_benchmark: false,
@@ -59,7 +62,10 @@ config :teiserver, Teiserver,
   require_mfa_for_privileged_roles:
     Teiserver.ConfigHelpers.get_env("TEI_MFA_REQUIRED", default_mfa_requirement, :bool),
   user_agreement:
-    "A verification code has been sent to your email address. Please read our terms of service at https://www.beyondallreason.info/privacy and the code of conduct at https://www.beyondallreason.info/code-of-conduct. Then enter your six digit code below if you agree to the terms."
+    Teiserver.ConfigHelpers.get_env(
+      "TEI_USER_AGREEMENT",
+      "A verification code has been sent to your email address. Please read our terms of service at https://www.beyondallreason.info/privacy and the code of conduct at https://www.beyondallreason.info/code-of-conduct. Then enter your six digit code below if you agree to the terms."
+    )
 
 repo_env = Application.get_env(:teiserver, Teiserver.Repo)
 
@@ -201,7 +207,7 @@ if Teiserver.ConfigHelpers.get_env("TEI_ENABLE_EMAIL_INTEGRATION", false, :bool)
     adapter: default_config[:adapter] || Swoosh.Adapters.SMTP,
     contact_address:
       Teiserver.ConfigHelpers.get_env("TEI_CONTACT_EMAIL_ADDRESS", "info@#{domain_name}"),
-    noreply_name: "Beyond All Reason",
+    noreply_name: Teiserver.ConfigHelpers.get_env("TEI_NOREPLY_NAME", "Beyond All Reason"),
     noreply_address:
       Teiserver.ConfigHelpers.get_env("TEI_NOREPLY_EMAIL_ADDRESS", "noreply@#{domain_name}"),
     relay: Teiserver.ConfigHelpers.get_env("TEI_SMTP_SERVER"),
@@ -239,7 +245,8 @@ enable_discord_bridge =
   Teiserver.ConfigHelpers.get_env("TEI_ENABLE_DISCORD_BRIDGE", false, :bool)
 
 config :teiserver, Teiserver,
-  discord: "https://discord.gg/beyond-all-reason",
+  discord:
+    Teiserver.ConfigHelpers.get_env("TEI_DISCORD_URL", "https://discord.gg/beyond-all-reason"),
   enable_discord_bridge: enable_discord_bridge
 
 if enable_discord_bridge do

@@ -168,10 +168,12 @@ defmodule Teiserver.EmailHelper do
 
     date = DateHelper.date_to_str(DateTime.utc_now(), format: :email_date)
 
+    game_name_short = Application.get_env(:teiserver, Teiserver)[:game_name_short]
+
     Email.new()
     |> Email.to({user.name, user.email})
-    |> Email.from({"BAR Teiserver", Mailer.noreply_address()})
-    |> Email.subject("BAR - New account")
+    |> Email.from({"#{game_name_short} Teiserver", Mailer.noreply_address()})
+    |> Email.subject("#{game_name_short} - New account")
     |> Email.header("Date", date)
     |> Email.header("Message-Id", message_id)
     |> Email.html_body(html_body)
