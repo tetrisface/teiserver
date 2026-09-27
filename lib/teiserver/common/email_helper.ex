@@ -26,9 +26,12 @@ defmodule Teiserver.EmailHelper do
             :ok
 
           {:error, error} ->
+            # The error is whatever gen_smtp returned, often a tuple, and the
+            # event is stored as JSON: kept as text so a failed email never
+            # takes the registering connection down with it.
             Telemetry.log_complex_server_event(user.id, "email.verification", %{
               result: "failure",
-              error: error
+              error: inspect(error)
             })
 
             {:error, error}

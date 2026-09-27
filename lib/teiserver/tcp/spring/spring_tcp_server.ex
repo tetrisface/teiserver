@@ -1406,6 +1406,12 @@ defmodule Teiserver.SpringTcpServer do
   defp get_transport_type_port({:sslsocket, {:gen_tcp, port, _state, _opts}, _data} = _socket),
     do: {:tls, port}
 
+  # OTP 28's sslsocket record: the port comes first, then the connection's
+  # pids, transport, callback module, reference and options.
+  defp get_transport_type_port({:sslsocket, port, _pid, _pid2, _transport, _cb, _ref, _opts})
+       when is_port(port),
+       do: {:tls, port}
+
   defp get_transport_type_port(port) when is_port(port),
     do: {:tcp, port}
 

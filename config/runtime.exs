@@ -208,6 +208,24 @@ config :teiserver, Teiserver.OAuth,
 if Teiserver.ConfigHelpers.get_env("TEI_ENABLE_EMAIL_INTEGRATION", false, :bool) do
   default_config = Application.get_env(:teiserver, Teiserver.Mailer)
 
+  # Verifying the relay needs a CA store, which OTP takes from the OS, and a
+  # hostname check that accepts the wildcard certificates relays use.
+  smtp_tls_options =
+    if Teiserver.ConfigHelpers.get_env("TEI_SMTP_TLS_VERIFY", true, :bool) do
+      [
+        verify: :verify_peer,
+        cacerts: :public_key.cacerts_get(),
+        server_name_indication:
+          "TEI_SMTP_SERVER" |> Teiserver.ConfigHelpers.get_env("") |> String.to_charlist(),
+        customize_hostname_check: [
+          match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+        ],
+        versions: [:"tlsv1.2"]
+      ]
+    else
+      [verify: :verify_none, versions: [:"tlsv1.2"]]
+    end
+
   config :teiserver, Teiserver.Mailer,
     # don't override the test adapter
     adapter: default_config[:adapter] || Swoosh.Adapters.SMTP,
@@ -222,14 +240,7 @@ if Teiserver.ConfigHelpers.get_env("TEI_ENABLE_EMAIL_INTEGRATION", false, :bool)
     password: Teiserver.ConfigHelpers.get_env("TEI_SMTP_PASSWORD"),
     # can be `:always` or `:never`
     tls: :always,
-    tls_options: [
-      verify:
-        if(Teiserver.ConfigHelpers.get_env("TEI_SMTP_TLS_VERIFY", true, :bool),
-          do: :verify_peer,
-          else: :verify_none
-        ),
-      versions: [:"tlsv1.2"]
-    ],
+    tls_options: smtp_tls_options,
     # can be `true`
     no_mx_lookups: false,
     # auth: :if_available # can be `always`. If your smtp relay requires authentication set it to `always`.
