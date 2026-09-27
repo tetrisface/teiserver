@@ -24,6 +24,12 @@ if Teiserver.ConfigHelpers.get_env("PHX_SERVER", nil) do
   config :teiserver, TeiserverWeb.Endpoint, server: true
 end
 
+# A release runs from a read-only directory (systemd's ProtectSystem, a
+# container image), and tzdata's updater writes its polls beside its own
+# data there and crashes every few seconds when it cannot. Time zone data
+# arrives with the next build instead.
+config :tzdata, :autoupdate, :disabled
+
 # used for mailing, checking origins, finding tls certs…
 domain_name = Teiserver.ConfigHelpers.get_env("TEI_DOMAIN_NAME", "beyondallreason.info")
 
