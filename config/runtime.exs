@@ -208,13 +208,15 @@ config :teiserver, Teiserver.OAuth,
 if Teiserver.ConfigHelpers.get_env("TEI_ENABLE_EMAIL_INTEGRATION", false, :bool) do
   default_config = Application.get_env(:teiserver, Teiserver.Mailer)
 
-  # Verifying the relay needs a CA store, which OTP takes from the OS, and a
-  # hostname check that accepts the wildcard certificates relays use.
+  # Verifying the relay needs a CA store, which OTP takes from the OS, a
+  # hostname check that accepts the wildcard certificates relays use, and a
+  # chain depth above gen_smtp's default of 0, which admits no intermediate.
   smtp_tls_options =
     if Teiserver.ConfigHelpers.get_env("TEI_SMTP_TLS_VERIFY", true, :bool) do
       [
         verify: :verify_peer,
         cacerts: :public_key.cacerts_get(),
+        depth: 10,
         server_name_indication:
           "TEI_SMTP_SERVER" |> Teiserver.ConfigHelpers.get_env("") |> String.to_charlist(),
         customize_hostname_check: [
