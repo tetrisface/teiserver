@@ -28,7 +28,7 @@ defmodule TeiserverWeb.GeneralLive.Menu do
 
     <div class="menu-grid">
       <.menu_page_link
-        :if={allow?(@current_user, "Contributor")}
+        :if={allow?(@scope, "Admin")}
         icon="fa-server"
         url={~p"/admin"}
       >
@@ -36,11 +36,19 @@ defmodule TeiserverWeb.GeneralLive.Menu do
       </.menu_page_link>
 
       <.menu_page_link
-        :if={allow?(@current_user, "Overwatch")}
+        :if={allow?(@scope, "Overwatch")}
         icon={Teiserver.Moderation.icon()}
         url={~p"/moderation"}
       >
         Moderation
+      </.menu_page_link>
+
+      <.menu_page_link
+        :if={allow?(@scope, "Staff")}
+        icon="fa-user-tie"
+        url={~p"/staff"}
+      >
+        Staff
       </.menu_page_link>
 
       <.menu_page_link
@@ -52,7 +60,15 @@ defmodule TeiserverWeb.GeneralLive.Menu do
       </.menu_page_link>
 
       <.menu_page_link
-        :if={allow?(@current_user, "Contributor")}
+        :if={allow?(@scope, "Technician")}
+        icon={Teiserver.Telemetry.TelemetryLib.icon()}
+        url={~p"/telemetry"}
+      >
+        Telemetry
+      </.menu_page_link>
+
+      <.menu_page_link
+        :if={allow?(@scope, "Contributor")}
         icon={StylingHelper.icon(:summary)}
         url={~p"/teiserver/reports"}
       >
@@ -60,7 +76,7 @@ defmodule TeiserverWeb.GeneralLive.Menu do
       </.menu_page_link>
 
       <.menu_page_link
-        icon={Teiserver.Chat.RoomMessageLib.icon()}
+        icon={Teiserver.Chat.SpringRoomMessageLib.icon()}
         url={~p"/chat"}
       >
         Chat
@@ -90,6 +106,13 @@ defmodule TeiserverWeb.GeneralLive.Menu do
         url={~p"/account/relationship"}
       >
         Relationships
+      </.menu_page_link>
+
+      <.menu_page_link
+        icon="list"
+        url={~p"/palette"}
+      >
+        Cmd Palette test
       </.menu_page_link>
     </div>
 

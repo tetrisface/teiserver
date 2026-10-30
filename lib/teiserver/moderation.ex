@@ -4,7 +4,7 @@ defmodule Teiserver.Moderation do
   alias Phoenix.PubSub
   alias Teiserver.Account
   alias Teiserver.Account.Scope
-  alias Teiserver.Data.Types, as: T
+  alias Teiserver.Account.User
   alias Teiserver.Helper.QueryHelpers
   alias Teiserver.Logging.Helpers, as: LoggingHelper
   alias Teiserver.Moderation.Action
@@ -622,6 +622,35 @@ defmodule Teiserver.Moderation do
 
   def broadcast_update_action(v), do: v
 
+  @spec expire_warning_reminders(User.id() | nil) ::
+          {:ok, [Action.t()]} | {:error, Ecto.Changeset.t()}
+  def expire_warning_reminders(nil), do: {:ok, []}
+
+  def expire_warning_reminders(user_id) do
+    result =
+      Repo.transaction(fn ->
+        list_actions(
+          search: [
+            target_id: user_id,
+            expiry: "Unexpired only",
+            in_restrictions: "Warning reminder"
+          ],
+          limit: :infinity
+        )
+        |> Enum.map(fn action ->
+          case action |> Action.changeset(%{"expires" => DateTime.utc_now()}) |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end)
+      end)
+
+    with {:ok, updated_actions} <- result do
+      Enum.each(updated_actions, &broadcast_update_action({:ok, &1}))
+      {:ok, updated_actions}
+    end
+  end
+
   # Used to remove all references to a given action prior to the deletion
   # of the action
   defp dereference_action_from_reports_query(%Action{id: action_id}) do
@@ -852,7 +881,7 @@ defmodule Teiserver.Moderation do
   end
 
   # Others
-  @spec unbridge_user(nil | T.user() | User.id(), String.t(), non_neg_integer(), String.t()) ::
+  @spec unbridge_user(nil | User.t() | User.id(), String.t(), non_neg_integer(), String.t()) ::
           any
   def unbridge_user(userid, message, flagged_word_count, location) when is_integer(userid) do
     unbridge_user(Account.get_user(userid), message, flagged_word_count, location)
@@ -867,7 +896,6 @@ defmodule Teiserver.Moderation do
           target_id: user.id,
           reason: "Automod detected flagged words in '#{message}'",
           restrictions: ["Bridging"],
-          score_modifier: 100,
           hidden: true,
           expires: DateTime.shift(DateTime.utc_now(), year: 1200)
         })

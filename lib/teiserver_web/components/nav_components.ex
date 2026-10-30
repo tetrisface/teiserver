@@ -103,7 +103,7 @@ defmodule TeiserverWeb.NavComponents do
             <.top_nav_item
               :if={allow?(@current_user, "Moderator")}
               text="Users"
-              route={~p"/teiserver/admin/user"}
+              route={~p"/moderation/users"}
               active={@active == "teiserver_user"}
             />
 
@@ -156,9 +156,12 @@ defmodule TeiserverWeb.NavComponents do
       <ul class="menu menu-horizontal w-full relative z-10 flex items-center gap-4 px-4 sm:px-6 lg:px-8 justify-end">
         <li>
           <%!--
-            Setting this to false for now as it will not correctly select dark CSS in some cases
+            Hiding this as when selected will swap to dark as part of tweaks made
+            to keep things consistent between system and dark mode. First loading of the site
+            will select this mode after which the user can select light or dark as desired.
           --%>
           <button
+            :if={false}
             class="flex p-2 cursor-pointer [[data-theme=system]_&]:bg-blue-900"
             phx-click={JS.dispatch("phx:set-theme")}
             data-phx-theme="system"
@@ -189,7 +192,7 @@ defmodule TeiserverWeb.NavComponents do
         </li>
 
         <li
-          :if={allow?(@scope, "Contributor")}
+          :if={allow?(@scope, "Admin")}
           class={[@active == "admin" && "menu-active"]}
         >
           <.link href={~p"/admin"}>Admin</.link>
@@ -200,6 +203,13 @@ defmodule TeiserverWeb.NavComponents do
           class={[@active == "moderation" && "menu-active"]}
         >
           <.link href={~p"/moderation"}>Moderation</.link>
+        </li>
+
+        <li
+          :if={allow?(@scope, "Staff")}
+          class={[@active == "staff" && "menu-active"]}
+        >
+          <.link href={~p"/staff"}>Staff</.link>
         </li>
 
         <li

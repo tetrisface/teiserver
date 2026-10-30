@@ -1,10 +1,7 @@
 defmodule Teiserver.TachyonLobby.LobbyTest do
-  alias ExUnit.Callbacks
   alias Teiserver.AssetFixtures
   alias Teiserver.Autohost.Types, as: AT
-  alias Teiserver.KvStore
   alias Teiserver.Player.SessionRegistry
-  alias Teiserver.Tachyon, as: TachyonLib
   alias Teiserver.TachyonLobby, as: Lobby
   alias Teiserver.TachyonLobby.Lobby, as: LobbyProcess
   alias Teiserver.TachyonLobby.Types, as: LT
@@ -67,13 +64,28 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
   end
 
   test "create with defaults" do
+    AssetFixtures.create_map(%{
+      spring_name: "the map",
+      display_name: "the map",
+      thumbnail_url: "http://irrelevant.com",
+      modoptions: %{
+        mapmetadata_startpos: "ImNvdWNvdSIK",
+        mapmetadata_startboxes_set: "ImhlbGxvIgo="
+      }
+    })
+
     {:ok, _pid, details} =
       mk_start_params([1, 1])
+      |> Map.put(:map_name, "the map")
       |> Lobby.create()
 
     assert details.boss_enabled? == false
     assert details.bosses == MapSet.new()
-    assert details.game_options == %{}
+
+    assert details.game_options == %{
+             "mapmetadata_startpos" => "ImNvdWNvdSIK",
+             "mapmetadata_startboxes_set" => "ImhlbGxvIgo="
+           }
   end
 
   test "create lobby with game options" do
@@ -825,7 +837,7 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
       {:ok, _pid, %LT.Details{id: id}} =
         mk_start_params([2, 2]) |> Lobby.create()
 
-      {:error, :invalid_bot_id} = Lobby.remove_bot(id, "lolnope")
+      {:error, :invalid_bot_id} = Lobby.remove_bot(id, @default_user_id, "lolnope")
     end
 
     test "remove_bot works" do
@@ -834,7 +846,7 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
 
       {:ok, bot_id} = Lobby.add_bot(id, @default_user_id, 1, "bot short name")
       assert_receive {:lobby, ^id, {:updated, _}}
-      :ok = Lobby.remove_bot(id, bot_id)
+      :ok = Lobby.remove_bot(id, @default_user_id, bot_id)
       assert_receive {:lobby, ^id, {:updated, update}}
       %{bots: %{^bot_id => nil}} = update
     end
@@ -847,7 +859,7 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
       assert_receive {:lobby, ^id, {:updated, _}}
       {:ok, bot_id2} = Lobby.add_bot(id, @default_user_id, 1, "bot short name")
       assert_receive {:lobby, ^id, {:updated, _}}
-      :ok = Lobby.remove_bot(id, bot_id1)
+      :ok = Lobby.remove_bot(id, @default_user_id, bot_id1)
 
       assert_receive {:lobby, ^id, {:updated, update}}
       %{bots: %{^bot_id1 => nil, ^bot_id2 => %{team: {1, 0, 0}}}} = update
@@ -870,7 +882,7 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
       %{spectators: %{"other-user-id" => %{join_queue_position: 1}}} = update
 
       # Act
-      :ok = Lobby.remove_bot(id, bot_id)
+      :ok = Lobby.remove_bot(id, @default_user_id, bot_id)
 
       # Assert
       assert_receive {:lobby, ^id, {:updated, update}}
@@ -1366,6 +1378,14 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
              ]
     end
 
+    test "teams must not be empty" do
+      {:ok, _pid, %LT.Details{id: id}} =
+        mk_start_params([2, 2]) |> Lobby.create()
+
+      {:error, _message} =
+        Lobby.update_properties(id, @default_user_id, %{ally_team_config: %{teams: []}})
+    end
+
     test "ally team config diff with less ally team teams" do
       {:ok, _pid, %LT.Details{id: id}} =
         mk_start_params([1, 1, 1]) |> Lobby.create()
@@ -1512,83 +1532,6 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
     end
   end
 
-  describe "state restoration" do
-    def setup_restore_config(_context) do
-      TachyonLib.enable_state_restoration()
-      Callbacks.on_exit(fn -> TachyonLib.disable_state_restoration() end)
-    end
-
-    setup [:setup_restore_config]
-
-    test "no snapshot when normal exit" do
-      sink_pid = mk_sink()
-
-      {:ok, _pid, %LT.Details{id: id}} =
-        mk_start_params([1, 1]) |> Map.put(:creator_pid, sink_pid) |> Lobby.create()
-
-      TachyonLib.restart_system()
-      assert KvStore.get("lobby", id) == nil
-    end
-
-    test "can rejoin lobby from snapshot" do
-      sink_pid = mk_sink()
-
-      {:ok, _pid, %LT.Details{id: id}} =
-        mk_start_params([1, 1]) |> Map.put(:creator_pid, sink_pid) |> Lobby.create()
-
-      Process.exit(sink_pid, :shutdown)
-      TachyonLib.restart_system()
-
-      sink_pid = mk_sink()
-      {:ok, _lobby_pid, details} = Lobby.rejoin(id, @default_user_id, sink_pid)
-      assert is_map_key(details.players, @default_user_id)
-    end
-
-    test "must rejoin first before being able to leave" do
-      sink_pid = mk_sink()
-
-      {:ok, _pid, %LT.Details{id: id}} =
-        mk_start_params([1, 1]) |> Map.put(:creator_pid, sink_pid) |> Lobby.create()
-
-      Process.exit(sink_pid, :shutdown)
-      TachyonLib.restart_system()
-
-      # another player is attempting to join before the lobby is fully up
-      join_task =
-        Task.async(fn ->
-          {:ok, _lobby_pid, _details} = Lobby.join(id, mk_player("other-user-id"))
-          :ok
-        end)
-
-      # timeout
-      assert Task.yield(join_task, 10) == nil
-
-      sink_pid = mk_sink()
-      {:ok, _lobby_pid, details} = Lobby.rejoin(id, @default_user_id, sink_pid)
-      assert is_map_key(details.players, @default_user_id)
-
-      # now the call is handled
-      assert Task.await(join_task) == :ok
-    end
-
-    test "list updates when lobby is restored" do
-      Lobby.subscribe_updates()
-      sink_pid = mk_sink()
-
-      {:ok, _pid, %LT.Details{id: id}} =
-        mk_start_params([1, 1]) |> Map.put(:creator_pid, sink_pid) |> Lobby.create()
-
-      drain_msg_queue()
-
-      Process.exit(sink_pid, :shutdown)
-      TachyonLib.restart_system()
-
-      sink_pid = mk_sink()
-      {:ok, _lobby_pid, _details} = Lobby.rejoin(id, @default_user_id, sink_pid)
-      assert_receive %{event: :add_lobby, overview: %LT.ListOverview{}, lobby_id: ^id}
-    end
-  end
-
   describe "update player status" do
     test "must be valid lobby" do
       {:error, :invalid_lobby} = Lobby.update_client_status("nolobby", "user1", %{ready?: true})
@@ -1706,6 +1649,35 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
       assert_receive {:lobby, ^id,
                       {:updated,
                        %{game_options: %{"foo" => nil, "ranked" => "false", "blah" => "qux"}}}}
+    end
+
+    test "changing map also set polystartboxes" do
+      AssetFixtures.create_map(%{
+        spring_name: "new map",
+        display_name: "new map",
+        thumbnail_url: "http://irrelevant.com",
+        modoptions: %{
+          mapmetadata_startpos: "ImNvdWNvdSIK",
+          mapmetadata_startboxes_set: "ImhlbGxvIgo="
+        }
+      })
+
+      {:ok, _pid, %LT.Details{id: id}} =
+        mk_start_params([2, 2])
+        |> Map.put(:boss_enabled?, true)
+        |> Lobby.create()
+
+      :ok = Lobby.update_properties(id, @default_user_id, %{map_name: "new map"})
+
+      assert_receive {:lobby, ^id,
+                      {:updated,
+                       %{
+                         map_name: "new map",
+                         game_options: %{
+                           "mapmetadata_startpos" => "ImNvdWNvdSIK",
+                           "mapmetadata_startboxes_set" => "ImhlbGxvIgo="
+                         }
+                       }}}
     end
   end
 
@@ -2101,6 +2073,35 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
       assert not is_map_key(t1, :bots)
       assert not is_map_key(t2, :players)
     end
+
+    test "with an empty team" do
+      startbox1 = %{top: 0, left: 0, bottom: 0.1, right: 0.1}
+      startbox2 = %{top: 0, left: 0, bottom: 0.2, right: 0.2}
+      startbox3 = %{top: 0, left: 0, bottom: 0.3, right: 0.3}
+
+      at_config = [
+        %LT.AllyTeamConfig{max_teams: 2, teams: [%{max_players: 1}], start_box: startbox1},
+        %LT.AllyTeamConfig{max_teams: 2, teams: [%{max_players: 1}], start_box: startbox2},
+        %LT.AllyTeamConfig{max_teams: 2, teams: [%{max_players: 1}], start_box: startbox3}
+      ]
+
+      {:ok, _pid, %LT.Details{id: id}} =
+        mk_start_params([1, 1, 1])
+        |> Map.put(:ally_team_config, at_config)
+        |> Lobby.create()
+
+      {:ok, _lobby_pid, _details} = Lobby.join(id, mk_player("other-user-id"))
+      {:ok, _team_details} = Lobby.join_ally_team(id, "other-user-id", 2)
+
+      start_script = LobbyProcess.get_start_script(id)
+
+      # ally teams may not have empty teams, so they are filtered out. What
+      # we really care about is the correct assignment of start box to ally teams
+      assert %{ally_teams: [at1, at3]} = start_script
+
+      %{start_box: ^startbox1, teams: [%{players: [%AT.Player{user_id: @default_user_id}]}]} = at1
+      %{start_box: ^startbox3, teams: [%{players: [%AT.Player{user_id: "other-user-id"}]}]} = at3
+    end
   end
 
   defp mk_player(user_id) do
@@ -2142,10 +2143,5 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
     after
       timeout -> Enum.reverse(acc)
     end
-  end
-
-  defp mk_sink(name \\ :sink) do
-    Supervisor.child_spec({Task, fn -> :timer.sleep(:infinity) end}, id: name)
-    |> Callbacks.start_supervised!()
   end
 end

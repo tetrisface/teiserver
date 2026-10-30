@@ -61,7 +61,13 @@ defimpl Teiserver.TachyonLobby.Event, for: Teiserver.TachyonLobby.Events.VoteEnd
       })
 
     side_effects = [{:vote_ended, ev.vote, ev.outcome} | agg.side_effects]
-    agg = %{agg | data: data, changes: changes, side_effects: side_effects}
+
+    agg =
+      %{agg | data: data, changes: changes, side_effects: side_effects}
+      |> LT.Aggregate.add_log("vote_end", %{
+        user_id: ev.vote.initiator,
+        details: %{vote_id: ev.vote.id, outcome: ev.outcome}
+      })
 
     apply_outcome(agg, ev.outcome, ev.vote.action)
   end
@@ -69,7 +75,7 @@ defimpl Teiserver.TachyonLobby.Event, for: Teiserver.TachyonLobby.Events.VoteEnd
   defp apply_outcome(agg, outcome, _action) when outcome != :passed, do: agg
 
   defp apply_outcome(agg, :passed, {:change_map, new_map}),
-    do: Event.apply_event(%Events.UpdateMapName{new_map: new_map}, agg)
+    do: Events.UpdateMapName.new(new_map) |> Event.apply_event(agg)
 
   defp apply_outcome(agg, :passed, {:appoint_boss, boss_id}),
     do: Event.apply_event(%Events.UpdateBoss{action: :add, appointee_id: boss_id}, agg)

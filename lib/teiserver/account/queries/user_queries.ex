@@ -170,11 +170,6 @@ defmodule Teiserver.Account.UserQueries do
       where: "All chat" in users.restrictions
   end
 
-  def _where(query, :mod_action, "Shadowbanned") do
-    from users in query,
-      where: users.shadowbanned == true
-  end
-
   def _where(query, :mod_action, "Warned") do
     from users in query,
       where: "Warning reminder" in users.restrictions
@@ -338,59 +333,6 @@ defmodule Teiserver.Account.UserQueries do
       preload: [reports_responded: reports_responded]
   end
 
-  @spec user_search_by_data(%{String.t() => String.t()}) :: {:ok, t()} | {:error, String.t()}
-  def user_search_by_data(values) do
-    # When submitting from the web, a blank value is an empty string so
-    # we need to filter that out as if it was a nil value
-    search_params =
-      %{
-        "hardware:gpuinfo" => values["gpu"],
-        "hardware:cpuinfo" => values["cpu"],
-        "hardware:osinfo" => values["os"],
-        "hardware:raminfo" => values["ram"],
-        "hardware:displaymax" => values["screen"],
-        values["custom_field"] => values["custom_value"]
-      }
-      |> Map.filter(fn {_k, v} ->
-        v != "" and v != nil
-      end)
-
-    # IP is handled differently because we're not searching in the same
-    # way so can't put it with the rest
-    ip_value = values["ip"] || ""
-
-    if Enum.empty?(search_params) and ip_value == "" do
-      {:error, "No valid search parameters"}
-    else
-      # The query with the join
-      base_query =
-        from users in User,
-          as: :users,
-          inner_join: user_stats in assoc(users, :user_stat),
-          as: :user_stats
-
-      # The majority of search parameters are applied here
-      query =
-        search_params
-        |> Enum.reduce(base_query, fn {key, value}, query ->
-          from [user_stats: user_stats] in query,
-            where: fragment("? ->> ? = ?", user_stats.data, ^key, ^value)
-        end)
-
-      # We want to treat IP slightly differently so we do that here
-      query =
-        if ip_value != "" do
-          from [user_stats: user_stats] in query,
-            where:
-              like(fragment("(? ->> ?)::text", user_stats.data, "last_ip"), ^(ip_value <> "%"))
-        else
-          query
-        end
-
-      {:ok, query}
-    end
-  end
-
   # New query style
   @spec users() :: t()
   def users do
@@ -402,6 +344,12 @@ defmodule Teiserver.Account.UserQueries do
   def where_id(query, id) do
     from users in query,
       where: users.id == ^id
+  end
+
+  @spec where_id_in(t(), [User.id()]) :: t()
+  def where_id_in(query, ids) do
+    from users in query,
+      where: users.id in ^ids
   end
 
   @spec where_id_not_in(t(), [User.id()]) :: t()
@@ -464,6 +412,52 @@ defmodule Teiserver.Account.UserQueries do
       where: ilike(users.email, ^uemail)
   end
 
+  @spec where_name_or_email_lower(t(), String.t()) :: t()
+  def where_name_or_email_lower(query, ""), do: query
+
+  def where_name_or_email_lower(query, search_term) do
+    from users in query,
+      where:
+        lower(users.email) == ^String.downcase(search_term) or
+          lower(users.name) == ^String.downcase(search_term)
+  end
+
+  @spec where_name_or_email_like(t(), String.t()) :: t()
+  def where_name_or_email_like(query, ""), do: query
+
+  def where_name_or_email_like(query, raw_search_term) do
+    search_term = "%" <> raw_search_term <> "%"
+
+    from users in query,
+      where:
+        ilike(users.email, ^search_term) or
+          ilike(users.name, ^search_term)
+  end
+
+  # Logged in after
+  def where_logged_in_after(query, ""), do: query
+
+  def where_logged_in_after(query, %Date{} = date) do
+    where_logged_in_after(query, DateTime.new!(date, ~T[00:00:00], "Etc/UTC"))
+  end
+
+  def where_logged_in_after(query, %DateTime{} = datetime) do
+    from users in query,
+      where: users.last_login >= ^datetime
+  end
+
+  # Logged in before
+  def where_logged_in_before(query, ""), do: query
+
+  def where_logged_in_before(query, %Date{} = date) do
+    where_logged_in_before(query, DateTime.new!(date, ~T[00:00:00], "Etc/UTC"))
+  end
+
+  def where_logged_in_before(query, %DateTime{} = datetime) do
+    from users in query,
+      where: users.last_login < ^datetime
+  end
+
   # Where role
   def where_has_role(query, ""), do: query
 
@@ -520,13 +514,30 @@ defmodule Teiserver.Account.UserQueries do
       where: users.inserted_at < ^timestamp
   end
 
+  @spec where_registered_after(t(), DateTime.t()) :: t()
+  def where_registered_after(query, timestamp) do
+    from users in query,
+      where: users.inserted_at >= ^timestamp
+  end
+
   # Joins
+  def join_user_stats(query) do
+    if has_named_binding?(query, :user_stats) do
+      query
+    else
+      from [users: users] in query,
+        left_join: user_stats in UserStat,
+        as: :user_stats,
+        on: user_stats.user_id == users.id
+    end
+  end
+
+  # Preloads
   @spec load_user_stat(t()) :: t()
   def load_user_stat(query) do
-    from users in query,
-      left_join: user_stats in UserStat,
-      as: :user_stats,
-      on: user_stats.user_id == users.id,
+    query = join_user_stats(query)
+
+    from [users: users, user_stats: user_stats] in query,
       preload: [user_stat: user_stats]
   end
 

@@ -132,13 +132,16 @@ config :teiserver, Teiserver,
     battle_match_unrated: 365,
     account_unverified: 14,
     lobby_chat: 90,
+    party_chat: 90,
+    battle_chat: 90,
     room_chat: 90,
-    battle_minimum_seconds: 120,
     direct_messages: 365,
+    battle_minimum_seconds: 120,
     linked_audit_logs: 365,
     unlinked_audit_logs: 365,
     unverified_users: 14,
-    previous_emails: 14
+    previous_emails: 14,
+    lobby_logs: 90
   },
   require_mfa_for_privileged_roles: true
 
@@ -208,7 +211,7 @@ config :teiserver, Oban,
 
        # Every day at 6am
        {"0 6 * * *", Teiserver.Account.DataExpiryTask},
-       {"0 6 * * *", Teiserver.Account.GDPRAnonymiseTask},
+       {"0 6 * * *", Teiserver.Account.GDPRPseudoAnonymiseTask},
 
        # Every day at 8am
        {"0 8 * * *", Teiserver.Admin.DailyCleanupTask},
@@ -218,7 +221,7 @@ config :teiserver, Oban,
 
        # 1:07 am
        {"7 1 * * *", Teiserver.Account.DeleteUnverifiedUsersTask},
-       {"7 1 * * *", Teiserver.Moderation.DeleteExpiredAARTaskTask},
+       {"7 1 * * *", Teiserver.Moderation.DeleteExpiredAARTask},
        {"22 1 * * *", Teiserver.Telemetry.EventCleanupTask},
        {"7 1 * * *", Teiserver.OAuth.Tasks.Cleanup},
 

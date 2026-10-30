@@ -20,8 +20,9 @@ defmodule Teiserver.Account.ClientLib do
   def get_client_by_name(""), do: nil
 
   def get_client_by_name(name) do
-    userid = Account.get_userid_from_name(name)
-    get_client_by_id(userid)
+    name
+    |> Account.get_userid_from_name()
+    |> get_client_by_id()
   end
 
   @spec get_client_by_id(nil) :: nil
@@ -284,7 +285,7 @@ defmodule Teiserver.Account.ClientLib do
   # not intended to be used as part of standard operation
   @spec refresh_client(User.id()) :: map()
   def refresh_client(userid) do
-    user = Account.deprecated_get_user_by_id(userid)
+    user = Account.get_user_by_id(userid)
     stats = Account.get_user_stat_data(user.id)
 
     client = get_client_by_id(userid)
@@ -293,9 +294,9 @@ defmodule Teiserver.Account.ClientLib do
       client
       | userid: user.id,
         name: user.name,
-        rank: user.rank,
-        moderator: Auth.moderator?(user.id),
-        bot: Auth.is_bot?(user.id),
+        rank: stats["rank"] || 0,
+        moderator: Auth.moderator?(user),
+        bot: Auth.is_bot?(user),
         ip: stats["last_ip"],
         country: stats["country"],
         lobby_client: stats["lobby_client"]

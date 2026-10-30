@@ -8,23 +8,18 @@ defmodule Teiserver.Player.Session do
   """
 
   alias Phoenix.PubSub
-  alias Plug.Crypto
   alias Teiserver.Account
   alias Teiserver.Account.User
-  alias Teiserver.Data.Types, as: T
   alias Teiserver.Helpers.BoundedQueue, as: BQ
   alias Teiserver.Helpers.MonitorCollection, as: MC
-  alias Teiserver.KvStore
   alias Teiserver.Matchmaking
   alias Teiserver.Matchmaking.QueueServer
   alias Teiserver.Messaging
   alias Teiserver.Party
   alias Teiserver.Party.Types, as: PartyTypes
   alias Teiserver.Player.SessionRegistry
-  alias Teiserver.Player.SessionSupervisor
   alias Teiserver.Player.Types, as: PT
   alias Teiserver.Player.Types.MessagingState
-  alias Teiserver.Tachyon
   alias Teiserver.TachyonBattle
   alias Teiserver.TachyonLobby
   alias Teiserver.TachyonLobby.Types, as: LT
@@ -56,7 +51,7 @@ defmodule Teiserver.Player.Session do
   end
 
   @impl GenServer
-  @spec init({:manual, pid(), T.user()} | {:snapshot, term()}) ::
+  @spec init({:manual, pid(), User.t()} | {:snapshot, term()}) ::
           {:ok, PT.Data.t()} | {:continue, term()}
   def init({:manual, conn_pid, user}) do
     Process.flag(:trap_exit, true)
@@ -98,25 +93,6 @@ defmodule Teiserver.Player.Session do
       lobby_list_subscription: nil
     }
   end
-
-  @impl GenServer
-  def terminate(:shutdown, %PT.Data{} = state) do
-    if Tachyon.should_restore_state?() do
-      # store more stuff as we enable the restoration of
-      # more state at startup
-      to_save =
-        %{
-          user_id: state.user.id,
-          party: state.party,
-          lobby_id: get_in(state.lobby.id)
-        }
-        |> :erlang.term_to_binary()
-
-      KvStore.put("session", to_string(state.user.id), to_save)
-    end
-  end
-
-  def terminate(_reason, _state), do: nil
 
   ################################################################################
   #                                                                              #
@@ -573,120 +549,11 @@ defmodule Teiserver.Player.Session do
     send(session_pid, :flush_lobby_list_updates)
   end
 
-  def restore_sessions do
-    Teiserver.Tachyon.System.restore_state("session", __MODULE__, :restore_session)
-  end
-
-  def restore_session(_blob_key, blob_value) do
-    snapshot = Crypto.non_executable_binary_to_term(blob_value, [:safe])
-
-    SessionSupervisor.start_session_from_snapshot(snapshot.user_id, snapshot)
-  end
-
   ################################################################################
   #                                                                              #
   #                       INTERNAL MESSAGE HANDLERS                              #
   #                                                                              #
   ################################################################################
-
-  @impl GenServer
-  def handle_continue({:snapshot, snapshot}, _state) do
-    user = Account.get_user!(snapshot.user_id)
-
-    state = initial_empty_state(user)
-
-    with {:ok, state} <- restore_parties(state, snapshot.party),
-         {:ok, state} <- rejoin_lobby(state, snapshot.lobby_id) do
-      broadcast_user_update!(user, :menu)
-
-      Logger.debug("session restored from snapshot")
-
-      {:ok, _tref} = :timer.send_after(@connection_timeout, :connection_timeout)
-      {:noreply, state}
-    else
-      {:error, err} ->
-        Logger.warning("Could not restore session: #{inspect(err)}")
-        {:stop, :normal}
-    end
-  end
-
-  defp restore_parties(state, party_snapshot) do
-    with {:ok, state} <- rejoin_current_party(state, party_snapshot) do
-      rejoin_invite_parties(state, party_snapshot)
-    end
-  end
-
-  defp rejoin_current_party(state, party_snapshot) do
-    if party_snapshot.current_party == nil do
-      {:ok, state}
-    else
-      case Party.rejoin(party_snapshot.current_party, state.user.id) do
-        {:ok, %PartyTypes.Overview{} = party_state} ->
-          state =
-            state
-            |> Map.update!(:party, fn p ->
-              %{p | current_party: party_state.id, version: party_state.version}
-            end)
-            |> Map.update!(:monitors, &MC.monitor(&1, party_state.pid, :current_party))
-
-          {:ok, state}
-
-        x ->
-          x
-      end
-    end
-  end
-
-  defp rejoin_invite_parties(state, party_snapshot) do
-    result =
-      Enum.reduce_while(party_snapshot.invited_to, state, fn {_version, id}, state ->
-        case Party.rejoin(id, state.user.id) do
-          {:ok, %PartyTypes.Overview{} = party_state} ->
-            state =
-              state
-              |> update_in([Access.key!(:party), Access.key!(:invited_to)], fn invites ->
-                [{party_state.version, id} | invites]
-              end)
-              |> Map.update!(
-                :monitors,
-                &MC.monitor(&1, party_state.pid, {:invited_to_party, id})
-              )
-
-            {:cont, state}
-
-          x ->
-            # for simplicity, "undo" everything, even if not yet there
-            for id <- party_snapshot.invited_ids do
-              MC.demonitor_by_val(state.monitors, {:invited_to_party, id})
-            end
-
-            {:halt, x}
-        end
-      end)
-
-    case result do
-      {:error, err} -> {:error, err}
-      st -> {:ok, st}
-    end
-  end
-
-  defp rejoin_lobby(state, nil), do: {:ok, state}
-
-  defp rejoin_lobby(state, lobby_id) do
-    case TachyonLobby.rejoin(lobby_id, state.user.id) do
-      {:ok, lobby_pid, %LT.Details{} = details} ->
-        state =
-          state
-          |> Map.update!(:monitors, &MC.monitor(&1, lobby_pid, {:lobby, details.id}))
-          |> Map.put(:lobby, %{id: details.id})
-
-        {:ok, state}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
   @impl GenServer
   def handle_call({:replace, new_conn_pid}, _from, %PT.Data{} = state) do
     original_conn_pid = state.conn_pid
@@ -1195,7 +1062,7 @@ defmodule Teiserver.Player.Session do
       do: {:reply, {:error, :not_in_lobby}, state}
 
   def handle_call({:lobby, :remove_bot, bot_id}, _from, %PT.Data{} = state) do
-    {:reply, TachyonLobby.remove_bot(state.lobby.id, bot_id), state}
+    {:reply, TachyonLobby.remove_bot(state.lobby.id, state.user.id, bot_id), state}
   end
 
   def handle_call({:lobby, :update_bot, _data}, _from, %PT.Data{} = state)
@@ -1352,9 +1219,9 @@ defmodule Teiserver.Player.Session do
         Enum.split_with(joined, fn {qid, _version} -> qid == queue_id end)
 
       monitors =
-        Enum.reduce(other_queues, state.monitors, fn {qid, _version}, monitors ->
+        Enum.reduce(other_queues, state.monitors, fn {qid, version}, monitors ->
           Matchmaking.leave_queue(qid, state.user.id)
-          MC.demonitor_by_val(monitors, {:mm_queue, qid}, [:flush])
+          MC.demonitor_by_val(monitors, {:mm_queue, {qid, version}}, [:flush])
         end)
 
       monitors = MC.monitor(monitors, room_pid, :mm_room)
@@ -1400,7 +1267,7 @@ defmodule Teiserver.Player.Session do
 
       {:pairing,
        %PT.MmPairingState{
-         paired_queue: q_id,
+         paired_queue: q_ref,
          room: _room_pid,
          frozen_queues: frozen_queues,
          readied?: readied
@@ -1408,16 +1275,16 @@ defmodule Teiserver.Player.Session do
         monitors =
           state.monitors
           |> MC.demonitor_by_val(:mm_room, [:flush])
-          |> MC.demonitor_by_val({:mm_queue, q_id})
+          |> MC.demonitor_by_val({:mm_queue, q_ref})
 
         state = Map.replace!(state, :monitors, monitors)
 
-        q_ids = [q_id | frozen_queues]
+        q_refs = [q_ref | frozen_queues]
 
         case reason do
           :timeout when not readied ->
             state =
-              leave_all_queues(q_ids, state)
+              leave_all_queues(q_refs, state)
               |> send_to_player({:matchmaking, :notify_lost})
               |> send_to_player({:matchmaking, {:cancelled, reason}})
 
@@ -1425,7 +1292,7 @@ defmodule Teiserver.Player.Session do
 
           {:server_error, _details} ->
             state =
-              leave_all_queues(q_ids, state)
+              leave_all_queues(q_refs, state)
               |> send_to_player({:matchmaking, :notify_lost})
               |> send_to_player({:matchmaking, {:cancelled, reason}})
 
@@ -1434,7 +1301,7 @@ defmodule Teiserver.Player.Session do
           _other_reason ->
             state = send_to_player(state, {:matchmaking, :notify_lost})
 
-            case join_matchmaking(q_ids, state) do
+            case join_matchmaking(q_refs, state) do
               {:ok, new_state} ->
                 {:noreply, new_state}
 
@@ -1998,9 +1865,9 @@ defmodule Teiserver.Player.Session do
       # the `queue` message is all or nothing, so if joining a later queue need
       # to leave the queues already joined
       {:error, reason} ->
-        Enum.each(joined, fn {qid, _version} ->
+        Enum.each(joined, fn {qid, version} ->
           Matchmaking.leave_queue(qid, user_id)
-          MC.demonitor_by_val(monitors, {:mm_queue, qid}, [:flush])
+          MC.demonitor_by_val(monitors, {:mm_queue, {qid, version}}, [:flush])
         end)
 
         {:error, reason}
@@ -2030,9 +1897,9 @@ defmodule Teiserver.Player.Session do
     # what should be done in that case
     monitors =
       Enum.reduce(queues_to_leave, state.monitors, fn
-        {qid, _version}, monitors ->
+        {qid, version}, monitors ->
           Matchmaking.leave_queue(qid, state.user.id)
-          MC.demonitor_by_val(monitors, {:mm_queue, qid}, [:flush])
+          MC.demonitor_by_val(monitors, {:mm_queue, {qid, version}}, [:flush])
       end)
 
     state

@@ -6,7 +6,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
   alias Teiserver.Account.Auth
   alias Teiserver.Account.AuthLib
   alias Teiserver.Account.CodeOfConductData
-  alias Teiserver.CacheUser
+  alias Teiserver.Chat
   alias Teiserver.Client
   alias Teiserver.Config
   alias Teiserver.Coordinator
@@ -52,7 +52,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
         true
 
       not Enum.member?(@always_allow ++ @forward_to_consul, cmd.command) ->
-        CacheUser.send_direct_message(
+        Chat.send_direct_message(
           state.userid,
           cmd.senderid,
           "No command of name '#{cmd.command}'"
@@ -101,7 +101,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
   end
 
   defp do_handle(%{command: "whoami", senderid: senderid} = _cmd, state) do
-    sender = CacheUser.deprecated_get_user_by_id(senderid)
+    sender = Account.get_user_by_id(senderid)
     stats = Account.get_user_stat_data(senderid)
 
     # Hours should be rounded down to make it more
@@ -172,21 +172,21 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
       |> List.flatten()
       |> Enum.reject(fn l -> l == nil end)
 
-    CacheUser.send_direct_message(state.userid, senderid, msg)
+    Chat.send_direct_message(state.userid, senderid, msg)
     state
   end
 
   defp do_handle(%{command: "whois", senderid: senderid, remaining: remaining} = _cmd, state) do
-    case CacheUser.deprecated_get_user_by_name(remaining) do
+    case Account.get_user_by_name(remaining) do
       nil ->
-        CacheUser.send_direct_message(
+        Chat.send_direct_message(
           state.userid,
           senderid,
           "Unable to find a user with that name"
         )
 
       user ->
-        sender = CacheUser.deprecated_get_user_by_id(senderid)
+        sender = Account.get_user_by_id(senderid)
         stats = Account.get_user_stat_data(user.id)
 
         previous_names =
@@ -256,10 +256,10 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
         ]
 
         mod_parts =
-          if Auth.admin?(sender) or Auth.moderator?(sender) do
+          if Auth.moderator?(sender) do
             # player_hours = Map.get(stats, "player_minutes", 0)/60 |> round
             # spectator_hours = Map.get(stats, "spectator_minutes", 0)/60 |> round
-            # rank_time = CacheUser.rank_time(user.id)
+            # rank_time = Login.rank_time(user.id)
 
             smurfs =
               Account.smurf_search(user)
@@ -313,7 +313,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
           |> List.flatten()
           |> Enum.reject(fn l -> l == nil end)
 
-        CacheUser.send_direct_message(state.userid, senderid, msg)
+        Chat.send_direct_message(state.userid, senderid, msg)
     end
 
     state
@@ -336,9 +336,9 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
       end)
 
     if Enum.empty?(messages) do
-      CacheUser.send_direct_message(state.userid, senderid, "No matches for '#{remaining}'")
+      Chat.send_direct_message(state.userid, senderid, "No matches for '#{remaining}'")
     else
-      CacheUser.send_direct_message(state.userid, senderid, messages)
+      Chat.send_direct_message(state.userid, senderid, messages)
     end
 
     state
@@ -348,7 +348,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
     do: do_handle(%{cmd | command: "mute"}, state)
 
   defp do_handle(%{command: "mute", senderid: senderid, remaining: remaining} = _cmd, state) do
-    case CacheUser.deprecated_get_user_by_name(remaining) do
+    case Account.get_user_by_name(remaining) do
       nil ->
         Coordinator.send_to_user(
           senderid,
@@ -382,7 +382,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
     do: do_handle(%{cmd | command: "unmute"}, state)
 
   defp do_handle(%{command: "unmute", senderid: senderid, remaining: remaining} = _cmd, state) do
-    case CacheUser.deprecated_get_user_by_name(remaining) do
+    case Account.get_user_by_name(remaining) do
       nil ->
         Coordinator.send_to_user(
           senderid,
@@ -408,9 +408,9 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
     end)
     |> Enum.uniq()
     |> Enum.reduce(nil, fn target, party_id ->
-      case CacheUser.get_userid(target) do
+      case Account.get_userid_from_name(target) do
         nil ->
-          CacheUser.send_direct_message(
+          Chat.send_direct_message(
             state.userid,
             senderid,
             "Unable to find a user '#{target}'"
@@ -449,7 +449,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
     end)
     |> Enum.uniq()
     |> Enum.each(fn target ->
-      case CacheUser.get_userid(target) do
+      case Account.get_userid_from_name(target) do
         nil ->
           :ok
 
@@ -540,7 +540,7 @@ defmodule Teiserver.Coordinator.CoordinatorCommands do
   end
 
   defp do_handle(%{command: command, senderid: senderid} = _cmd, state) do
-    CacheUser.send_direct_message(
+    Chat.send_direct_message(
       state.userid,
       senderid,
       "I don't have a handler for the command '#{command}'"

@@ -8,8 +8,10 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
   alias Teiserver.Account
   alias Teiserver.Account.Auth
   alias Teiserver.Account.AuthLib
+  alias Teiserver.Account.Login
   alias Teiserver.Account.RecacheUserStatsTask
-  alias Teiserver.CacheUser
+  alias Teiserver.Account.User
+  alias Teiserver.Chat
   alias Teiserver.Client
   alias Teiserver.Config
   alias Teiserver.Coordinator
@@ -56,7 +58,7 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
     account = make_and_cache_coordinator_account()
 
     {user, client} =
-      case CacheUser.internal_client_login(account.id) do
+      case Login.internal_client_login(account.id) do
         {:ok, user, client} -> {user, client}
         :error -> raise "No coordinator user found"
       end
@@ -94,7 +96,7 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
   # def handle_info({:new_message, userid, "coordinator", _message}, state) do
   #   # If it's us sending it, don't reply
   #   if userid != state.userid do
-  #     username = CacheUser.get_username(userid)
+  #     username = Account.get_username_by_id(userid)
   #     Room.send_message(state.userid, "coordinator", "I don't currently handle messages, sorry #{username}")
   #   end
   #   {:noreply, state}
@@ -158,15 +160,29 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
 
     case converted_message do
       ^warning_response ->
-        Client.clear_awaiting_warn_ack(userid)
-        CacheUser.send_direct_message(state.userid, userid, "Thank you")
+        case Moderation.expire_warning_reminders(userid) do
+          {:ok, _resolved_actions} ->
+            Client.clear_awaiting_warn_ack(userid)
+            Chat.send_direct_message(state.userid, userid, "Thank you")
+
+          {:error, changeset} ->
+            Logger.error(
+              "Failed to resolve warnings on acknowledgement for user #{userid}: #{inspect(changeset.errors)}"
+            )
+
+            Chat.send_direct_message(
+              state.userid,
+              userid,
+              "Something went wrong, please open a bug report."
+            )
+        end
 
       _other_message ->
-        user = CacheUser.deprecated_get_user_by_id(userid)
+        user = Account.get_user_by_id(userid)
         Logger.info("CoordinatorServer unhandled DM from #{user.name} of: #{message}")
 
         if not Auth.is_bot?(user) do
-          CacheUser.send_direct_message(
+          Chat.send_direct_message(
             state.userid,
             userid,
             "I don't currently handle messages, sorry #{user.name}"
@@ -209,8 +225,7 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
   def handle_info(%{channel: "client_inout"}, state), do: {:noreply, state}
 
   def handle_info({:do_client_inout, :login, userid}, state) do
-    user = CacheUser.deprecated_get_user_by_id(userid)
-    db_user = Account.get_user(userid)
+    user = Account.get_user_by_id(userid)
 
     if user do
       # Do we have a system welcome message?
@@ -221,8 +236,8 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
       end
 
       mfa_warning? =
-        AuthLib.mfa_required?() and AuthLib.contains_mfa_role?(db_user.roles) and
-          not AuthLib.has_active_mfa?(db_user.id)
+        AuthLib.mfa_required?() and AuthLib.contains_mfa_role?(user.roles) and
+          not AuthLib.has_active_mfa?(user.id)
 
       if mfa_warning? do
         host = Application.get_env(:teiserver, TeiserverWeb.Endpoint)[:url][:host]
@@ -235,7 +250,7 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
       end
 
       relevant_restrictions =
-        db_user.restrictions
+        user.restrictions
         |> Enum.filter(fn r -> not Enum.member?(["Bridging"], r) end)
 
       if not Enum.empty?(relevant_restrictions) do
@@ -283,7 +298,7 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
           # Do we need an acknowledgement? If they are muted then no.
           msg =
             cond do
-              Account.has_mute?(db_user) ->
+              Account.has_mute?(user) ->
                 msg ++ @dispute_string
 
               has_warning ->
@@ -298,7 +313,7 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
                 acknowledge_prompt =
                   Config.get_site_config_cache("teiserver.Warning acknowledge prompt")
 
-                msg ++ [@dispute_string, acknowledge_prompt]
+                msg ++ @dispute_string ++ [acknowledge_prompt]
 
               true ->
                 msg ++ @dispute_string
@@ -333,7 +348,7 @@ defmodule Teiserver.Coordinator.CoordinatorServer do
     account
   end
 
-  @spec get_coordinator_account() :: Teiserver.CacheUser.t() | map()
+  @spec get_coordinator_account() :: User.t() | map()
   def get_coordinator_account do
     Account.system_user()
   end

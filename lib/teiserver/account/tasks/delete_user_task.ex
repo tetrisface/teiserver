@@ -2,7 +2,6 @@ defmodule Teiserver.Admin.DeleteUserTask do
   @moduledoc false
   alias Ecto.Adapters.SQL
   alias Teiserver.Account
-  alias Teiserver.CacheUser
   alias Teiserver.Repo
 
   @doc """
@@ -49,9 +48,13 @@ defmodule Teiserver.Admin.DeleteUserTask do
       "DELETE FROM audit_logs WHERE user_id = ANY($1)",
 
       # Chat
-      "DELETE FROM teiserver_lobby_messages WHERE user_id = ANY($1)",
-      "DELETE FROM teiserver_room_messages WHERE user_id = ANY($1)",
+      "DELETE FROM spring_lobby_messages WHERE user_id = ANY($1)",
+      "DELETE FROM spring_room_messages WHERE user_id = ANY($1)",
+      "DELETE FROM spring_direct_messages WHERE from_id = ANY($1) OR to_id = ANY($1)",
+      "DELETE FROM lobby_messages WHERE user_id = ANY($1)",
+      "DELETE FROM party_messages WHERE user_id = ANY($1)",
       "DELETE FROM direct_messages WHERE from_id = ANY($1) OR to_id = ANY($1)",
+      "DELETE FROM battle_messages WHERE from_id = ANY($1) OR to_id = ANY($1)",
 
       # Match stuff
       "DELETE FROM teiserver_battle_match_memberships WHERE user_id = ANY($1)",
@@ -63,6 +66,10 @@ defmodule Teiserver.Admin.DeleteUserTask do
       "DELETE FROM moderation_actions WHERE target_id = ANY($1)",
       "DELETE FROM moderation_bans WHERE source_id = ANY($1)",
       "UPDATE moderation_bans SET added_by_id = #{system_user_id} WHERE added_by_id = ANY($1)",
+
+      # Notes
+      "DELETE FROM user_notes WHERE user_id = ANY($1)",
+      "UPDATE user_notes SET creator_id = #{system_user_id} WHERE creator_id = ANY($1)",
 
       # User prefs
       "DELETE FROM microblog_user_preferences WHERE user_id = ANY($1)"
@@ -77,6 +84,6 @@ defmodule Teiserver.Admin.DeleteUserTask do
 
     # Delete our cache of them
     id_list
-    |> Enum.each(fn userid -> CacheUser.decache_user(userid) end)
+    |> Enum.each(fn userid -> Account.decache_user(userid) end)
   end
 end

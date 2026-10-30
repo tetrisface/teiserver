@@ -31,7 +31,8 @@ defmodule Teiserver.Logging.AuditLogQueries do
 
   @spec where_subject_id(t(), [User.id()]) :: t()
   def where_subject_id(query, user_id) do
-    # Need to use a string for the jsonb getters
+    # Need to use a string for the jsonb getters as we are using ->> which
+    # casts it to a string.
     user_id = to_string(user_id)
 
     from audit_logs in query,
@@ -43,6 +44,35 @@ defmodule Teiserver.Logging.AuditLogQueries do
           fragment("? ->> ? = ?", audit_logs.details, "actual_origin_id", ^user_id) or
           fragment("? ->> ? = ?", audit_logs.details, "origin_id", ^user_id) or
           fragment("? ->> ? = ?", audit_logs.details, "smurf_id", ^user_id)
+  end
+
+  @spec where_subject_or_user_id(t(), [User.id()]) :: t()
+  def where_subject_or_user_id(query, user_id) do
+    # Need to use a string for the jsonb getters as we are using ->> which
+    # casts it to a string.
+    user_id = to_string(user_id)
+
+    from audit_logs in query,
+      where:
+        audit_logs.user_id == ^user_id or
+          fragment("? ->> ? = ?", audit_logs.details, "user", ^user_id) or
+          fragment("? ->> ? = ?", audit_logs.details, "user_id", ^user_id) or
+          fragment("? ->> ? = ?", audit_logs.details, "target", ^user_id) or
+          fragment("? ->> ? = ?", audit_logs.details, "target_id", ^user_id) or
+          fragment("? ->> ? = ?", audit_logs.details, "actual_origin_id", ^user_id) or
+          fragment("? ->> ? = ?", audit_logs.details, "origin_id", ^user_id) or
+          fragment("? ->> ? = ?", audit_logs.details, "smurf_id", ^user_id)
+  end
+
+  @spec where_details_equal(t(), String.t(), String.t()) :: t()
+  def where_details_equal(query, key, value) when is_integer(value) do
+    from audit_logs in query,
+      where: fragment("? -> ? = ?", audit_logs.details, ^key, ^value)
+  end
+
+  def where_details_equal(query, key, value) do
+    from audit_logs in query,
+      where: fragment("? ->> ? = ?", audit_logs.details, ^key, ^value)
   end
 
   @spec where_action(t(), nil | String.t() | [String.t()]) :: t()
@@ -69,10 +99,12 @@ defmodule Teiserver.Logging.AuditLogQueries do
 
   @spec order_by_inserted_at(t(), :asc | :desc) :: t()
   def order_by_inserted_at(query, direction \\ :asc) do
+    # If two audit logs share the same timestamp their ordering
+    # will not be consistent without also ordering by ID
     if direction == :asc do
-      from(audit_logs in query, order_by: [asc: audit_logs.inserted_at])
+      from(audit_logs in query, order_by: [asc: audit_logs.inserted_at, asc: audit_logs.id])
     else
-      from(audit_logs in query, order_by: [desc: audit_logs.inserted_at])
+      from(audit_logs in query, order_by: [desc: audit_logs.inserted_at, desc: audit_logs.id])
     end
   end
 

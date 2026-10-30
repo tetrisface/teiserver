@@ -24,7 +24,6 @@ defmodule TeiserverWeb.API.Admin.UserController do
     "permissions" => [],
     "roles" => [],
     "restrictions" => [],
-    "shadowbanned" => false,
     "data" => Account.User.default_data()
   }
   @app_not_found_error "generic_lobby OAuth application not found. Please run 'mix teiserver.tachyon_setup' to create it."
@@ -62,7 +61,7 @@ defmodule TeiserverWeb.API.Admin.UserController do
   end
 
   def refresh_token(conn, %{"email" => email}) do
-    with {:ok, user} <- deprecated_get_user_by_email(email),
+    with {:ok, user} <- get_user_by_email(email),
          :ok <- ensure_unprivileged(user),
          {:ok, app} <- get_generic_lobby_app(),
          {:ok, token} <- create_user_token(user, app) do
@@ -124,11 +123,11 @@ defmodule TeiserverWeb.API.Admin.UserController do
     end
   end
 
-  defp deprecated_get_user_by_email(nil), do: {:error, :user_not_found}
-  defp deprecated_get_user_by_email(""), do: {:error, :user_not_found}
+  defp get_user_by_email(nil), do: {:error, :user_not_found}
+  defp get_user_by_email(""), do: {:error, :user_not_found}
 
-  defp deprecated_get_user_by_email(email) do
-    case Account.query_user(search: [email_lower: email]) do
+  defp get_user_by_email(email) do
+    case Account.get_user_by_email(email) do
       nil -> {:error, :user_not_found}
       user -> {:ok, user}
     end
@@ -155,7 +154,7 @@ defmodule TeiserverWeb.API.Admin.UserController do
     user_data =
       Map.take(
         user,
-        ~w(id name email icon colour roles permissions restrictions shadowbanned last_login last_played)a
+        ~w(id name email icon colour roles permissions restrictions last_login last_played)a
       )
 
     timestamps = %{

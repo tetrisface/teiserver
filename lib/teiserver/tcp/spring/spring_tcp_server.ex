@@ -4,8 +4,8 @@ defmodule Teiserver.SpringTcpServer do
   alias Phoenix.PubSub
   alias Teiserver.Account
   alias Teiserver.Account.Auth
+  alias Teiserver.Account.Login
   alias Teiserver.Battle
-  alias Teiserver.CacheUser
   alias Teiserver.Client
   alias Teiserver.Config
   alias Teiserver.Coordinator
@@ -354,13 +354,13 @@ defmodule Teiserver.SpringTcpServer do
 
   # We were not able to login right away, instead we had to queue for a bit!
   def handle_info({:login_accepted, userid}, state) do
-    user = Account.deprecated_get_user_by_id(userid)
+    user = Account.get_user_by_id(userid)
     new_state = SpringOut.do_login_accepted(state, user, state.lobby)
 
     if state.lobby_hash == nil do
       send(self(), :terminate)
     else
-      {:ok, _user} = CacheUser.do_login(user, state.ip, state.lobby, state.lobby_hash)
+      {:ok, _user} = Login.do_login(user, state.ip, state.lobby, state.lobby_hash)
     end
 
     {:noreply, new_state}
@@ -453,7 +453,7 @@ defmodule Teiserver.SpringTcpServer do
       new_state = SpringOut.reply(:disconnect, "Logged out", nil, state)
       {:stop, :normal, new_state}
     else
-      username = Account.get_username(msg.userid)
+      username = Account.get_username_by_id(msg.userid)
       new_state = user_logged_out(msg.userid, username, state)
       {:noreply, new_state}
     end
@@ -725,7 +725,7 @@ defmodule Teiserver.SpringTcpServer do
   end
 
   defp user_updated(fields, state) do
-    new_user = CacheUser.deprecated_get_user_by_id(state.userid)
+    new_user = Account.get_user_by_id(state.userid)
     new_state = %{state | user: new_user}
 
     fields
@@ -1195,7 +1195,7 @@ defmodule Teiserver.SpringTcpServer do
   @spec engage_flood_protection(map()) :: {:stop, String.t(), map()}
   defp engage_flood_protection(state) do
     SpringOut.reply(:disconnect, "Flood protection", nil, state)
-    CacheUser.set_flood_level(state.userid, 10)
+    Login.set_flood_level(state.userid, 10)
     Client.disconnect(state.userid, "SpringTCPServer.flood_protection")
 
     {:stop, :normal, %{state | userid: nil}}
@@ -1234,6 +1234,11 @@ defmodule Teiserver.SpringTcpServer do
   #       %{state | known_users: new_known}
   #   end
   # end
+
+  @spec can_use_tls?() :: boolean()
+  def can_use_tls? do
+    Application.get_env(:teiserver, Teiserver.SpringTcpServer)[:listeners][:tls] != nil
+  end
 
   # Example of how gen-smtp handles upgrading the connection
   # https://github.com/gen-smtp/gen_smtp/blob/master/src/gen_smtp_server_session.erl#L683-L720

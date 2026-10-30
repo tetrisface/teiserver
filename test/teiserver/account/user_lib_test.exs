@@ -29,6 +29,21 @@ defmodule Teiserver.Account.UserLibTest do
     end
   end
 
+  describe "valid_email?/1" do
+    test "valid" do
+      assert UserLib.valid_email?("name@domain.com") == :ok
+      assert UserLib.valid_email?("name.name@domain.co.uk") == :ok
+    end
+
+    test "invalid" do
+      assert UserLib.valid_email?("name@domain") == {:error, "invalid email"}
+      assert UserLib.valid_email?("name.domain") == {:error, "invalid email"}
+      assert UserLib.valid_email?("name") == {:error, "invalid email"}
+      assert UserLib.valid_email?("@domain") == {:error, "invalid email"}
+      assert UserLib.valid_email?("@domain.com") == {:error, "invalid email"}
+    end
+  end
+
   describe "update_user_email/3" do
     setup do
       user = AccountFixtures.user_fixture()
@@ -185,48 +200,6 @@ defmodule Teiserver.Account.UserLibTest do
                })
     end
 
-    test "admin_update_user/2 - success" do
-      user = AccountFixtures.user_fixture()
-
-      assert {:ok, %{name: "AdminUser"}} =
-               UserLib.admin_update_user(user, %{"name" => "AdminUser"})
-    end
-
-    test "admin_update_user/2 - error" do
-      user = AccountFixtures.user_fixture()
-
-      assert {:error, %{errors: [name: _error]}} =
-               UserLib.admin_update_user(user, %{name: @disallowed_name})
-    end
-
-    test "senior_moderator_update_user/2 - success" do
-      user = AccountFixtures.user_fixture()
-
-      assert {:ok, %{name: "SeniorModeratorUser"}} =
-               UserLib.senior_moderator_update_user(user, %{"name" => "SeniorModeratorUser"})
-    end
-
-    test "senior_moderator_update_user/2 - error" do
-      user = AccountFixtures.user_fixture()
-
-      assert {:error, %{errors: [name: _error]}} =
-               UserLib.senior_moderator_update_user(user, %{name: @disallowed_name})
-    end
-
-    test "moderator_update_user/2 - success" do
-      user = AccountFixtures.user_fixture()
-
-      assert {:ok, %{name: "ModeratorUser"}} =
-               UserLib.moderator_update_user(user, %{"name" => "ModeratorUser"})
-    end
-
-    test "moderator_update_user/2 - error" do
-      user = AccountFixtures.user_fixture()
-
-      assert {:error, %{errors: [name: _error]}} =
-               UserLib.moderator_update_user(user, %{name: @disallowed_name})
-    end
-
     test "server_update_user/2 - error" do
       user = AccountFixtures.user_fixture()
 
@@ -242,93 +215,6 @@ defmodule Teiserver.Account.UserLibTest do
                  "name" => @disallowed_name,
                  "existing" => "password"
                })
-    end
-  end
-
-  describe "list_users_by_data" do
-    setup [:user_stat_data_fixtures]
-
-    test "user_ids_by_data/1 - empty field", %{users: users} do
-      [user1, user2 | _remainder] = users
-
-      assert user_ids_by_data(%{
-               "cpu" => "AMD",
-               "gpu" => ""
-             }) == [user1]
-
-      assert user_ids_by_data(%{
-               "cpu" => "",
-               "gpu" => "AMD"
-             }) == [user1, user2]
-    end
-
-    test "user_ids_by_data/1 - 1 field", %{users: users} do
-      [user1, user2 | _remainder] = users
-
-      # Searching by 1 field
-      assert user_ids_by_data(%{
-               "cpu" => "AMD"
-             }) == [user1]
-
-      assert user_ids_by_data(%{
-               "gpu" => "AMD"
-             }) == [user1, user2]
-    end
-
-    test "user_ids_by_data/1 - 2 fields", %{users: users} do
-      [_user1, user2, user3 | _remainder] = users
-
-      # Search by 2 fields
-      assert user_ids_by_data(%{
-               "cpu" => "Intel",
-               "ram" => "16GB"
-             }) == [user3]
-
-      assert user_ids_by_data(%{
-               "cpu" => "Intel",
-               "os" => "Windows"
-             }) == [user2, user3]
-    end
-
-    test "user_ids_by_data/1 - ip", %{users: users} do
-      [user1, user2, user3 | _remainder] = users
-
-      # IP, needs to be able to handle partial
-      assert user_ids_by_data(%{
-               "ip" => "192."
-             }) == [user1, user2]
-
-      assert user_ids_by_data(%{
-               "ip" => "192.168.0.2"
-             }) == []
-
-      assert user_ids_by_data(%{
-               "ip" => "192.168.0.3"
-             }) == [user2]
-
-      assert user_ids_by_data(%{
-               "ip" => "127."
-             }) == [user3]
-    end
-
-    test "user_ids_by_data/1 - custom_field", %{users: users} do
-      [user1, _user2, user3 | _remainder] = users
-      # Custom value
-      assert user_ids_by_data(%{
-               "custom_field" => "some_key",
-               "custom_value" => "some_value"
-             }) == [user1, user3]
-    end
-
-    test "user_ids_by_data/1 - empty data", %{} do
-      #  No data at all
-      assert user_ids_by_data(%{}) == []
-
-      # Some data but it's empty, should be same result
-      assert user_ids_by_data(%{
-               "cpu" => "",
-               "os" => ""
-             }) == []
     end
   end
 
@@ -451,12 +337,5 @@ defmodule Teiserver.Account.UserLibTest do
     %User{} = smurf = AccountFixtures.user_fixture()
 
     %{moderator: moderator, origin: origin, smurf: smurf}
-  end
-
-  defp user_ids_by_data(data) do
-    data
-    |> UserLib.list_users_by_data()
-    |> Enum.map(& &1.id)
-    |> Enum.sort()
   end
 end

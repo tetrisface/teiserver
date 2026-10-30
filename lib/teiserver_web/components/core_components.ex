@@ -69,7 +69,7 @@ defmodule TeiserverWeb.CoreComponents do
                 <button
                   phx-click={hide_modal(@on_cancel, @id)}
                   type="button"
-                  class="-m-3 flex-none p-3 opacity-20 hover:opacity-40"
+                  class="-m-3 flex-none p-3 opacity-20 hover:opacity-40 btn-close"
                   aria-label={gettext("close")}
                 >
                   <Fontawesome.icon icon="times" />
@@ -177,8 +177,10 @@ defmodule TeiserverWeb.CoreComponents do
   attr :flash, :map, required: true, doc: "the map of flash messages"
 
   def flash_group(assigns) do
+    # We set the z-index to 9999 because in some cases the toast is not correctly displaying
+    # over other elements even though it's a toast class
     ~H"""
-    <div class="toast toast-top toast-end mt-25">
+    <div class="toast toast-top toast-end mt-25 z-9999">
       <.flash id="flash-info" kind={:info} title="Information" role="alert" flash={@flash} />
       <.flash id="flash-success" kind={:success} title="Success!" role="alert" flash={@flash} />
       <.flash id="flash-warning" kind={:warning} title="Warning!" role="alert" flash={@flash} />
@@ -775,7 +777,7 @@ defmodule TeiserverWeb.CoreComponents do
       </.list>
   """
   slot :item, required: true do
-    attr :title, :string, required: true
+    attr :title, :string
   end
 
   def list(assigns) do
@@ -783,7 +785,7 @@ defmodule TeiserverWeb.CoreComponents do
     <div class="mt-14">
       <dl class="-my-4 divide-y divide-zinc-100">
         <div :for={item <- @item} class="flex gap-4 py-4 sm:gap-8">
-          <dt class="list-title-item">
+          <dt :if={item[:title]} class="list-title-item">
             {item.title}
           </dt>
           <dd class="list-content-item">
@@ -797,17 +799,37 @@ defmodule TeiserverWeb.CoreComponents do
 
   @doc """
   Renders a back navigation link.
+
+  Use navigate within the same LiveView session and href when directing to a different session.
+
   ## Examples
-      <.back navigate={~p"/posts"}>Back to posts</.back>
+      <.back navigate={~p"/section/posts"}>Back to posts</.back>
+
+      <.back href={~p"/section"}>Back to section</.back>
   """
-  attr :navigate, :any, required: true
+  attr :navigate, :any
+  attr :href, :any
   slot :inner_block, required: true
 
-  def back(assigns) do
+  def back(%{navigate: _navigate} = assigns) do
     ~H"""
     <div class="mt-16">
       <.link
         navigate={@navigate}
+        class="btn btn-secondary btn-soft text-sm font-semibold leading-6"
+      >
+        <i class="fa-fw fa-solid fa-arrow-left" />
+        {render_slot(@inner_block)}
+      </.link>
+    </div>
+    """
+  end
+
+  def back(%{href: _href} = assigns) do
+    ~H"""
+    <div class="mt-16">
+      <.link
+        href={@href}
         class="btn btn-secondary btn-soft text-sm font-semibold leading-6"
       >
         <i class="fa-fw fa-solid fa-arrow-left" />
@@ -896,5 +918,20 @@ defmodule TeiserverWeb.CoreComponents do
   """
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
+  end
+
+  @doc """
+  <.ui_deprecation_warning new_url={~p"/some/path"} />
+  """
+  attr :new_url, :string
+
+  def ui_deprecation_warning(assigns) do
+    ~H"""
+    <div class="alert alert-warning mt-4">
+      This page has been moved to the <a href={@new_url}>new UI</a>. If there is functionality missing from the new pages or errors present in them please
+      <a href="https://github.com/beyond-all-reason/teiserver/issues">create an issue</a>
+      on the Teiserver repo so we can ensure it's not missed.
+    </div>
+    """
   end
 end

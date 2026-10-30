@@ -21,7 +21,7 @@ defmodule TeiserverWeb.AdminLive.Menu do
       </.menu_page_link>
 
       <.menu_page_link
-        :if={allow_any?(@current_user, ~w(Server Engine))}
+        :if={allow?(@scope, "Technician")}
         icon={Teiserver.Telemetry.TelemetryLib.icon()}
         url={~p"/telemetry"}
       >
@@ -34,14 +34,6 @@ defmodule TeiserverWeb.AdminLive.Menu do
         url={~p"/admin/matchmaking"}
       >
         Matchmaking
-      </.menu_page_link>
-
-      <.menu_page_link
-        :if={allow_any?(@scope, ~w(Contributor Overwatch))}
-        icon={Teiserver.Communication.TextCallbackLib.icon()}
-        url={~p"/admin/text_callbacks"}
-      >
-        Text callbacks
       </.menu_page_link>
 
       <.menu_page_link
@@ -93,9 +85,9 @@ defmodule TeiserverWeb.AdminLive.Menu do
       </.menu_page_link>
 
       <.menu_page_link
-        :if={allow_any?(@scope, ~w(Server))}
+        :if={allow_any?(@scope, ~w(Admin))}
         icon={Teiserver.Config.SiteConfigLib.icon()}
-        url={~p"/teiserver/admin/site"}
+        url={~p"/admin/site_config"}
       >
         Site config
       </.menu_page_link>
@@ -111,10 +103,19 @@ defmodule TeiserverWeb.AdminLive.Menu do
       </.menu_page_link>
 
       <.menu_page_link
-        icon="list"
-        url={~p"/admin/palette"}
+        :if={allow_any?(@scope, ~w(Admin))}
+        icon="fa-envelope"
+        url={~p"/admin/tools/blog_activity"}
       >
-        Cmd Palette test
+        Blog activity
+      </.menu_page_link>
+
+      <.menu_page_link
+        :if={allow_any?(@scope, ~w(Admin))}
+        icon="fa-people-group"
+        url={~p"/admin/tools/population_report"}
+      >
+        Population Report
       </.menu_page_link>
     </div>
 

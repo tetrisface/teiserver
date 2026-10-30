@@ -91,6 +91,20 @@ defmodule TeiserverWeb.Router do
         {UserAuthentication, :ensure_authenticated}
       ] do
       live "/", Menu, :index
+      live "/palette", Palette, :show
+    end
+  end
+
+  scope "/account", TeiserverWeb.AccountLive do
+    pipe_through([:live_browser, :app_layout, :protected, :tailwind])
+
+    live_session :gdpr_self_service,
+      layout: {TeiserverWeb.Layouts, :public_tw},
+      on_mount: [
+        {Teiserver.Account.DefaultsPlug, {:set, %{site_menu_active: "account"}}},
+        {UserAuthentication, :ensure_authenticated}
+      ] do
+      live "/gdpr-self-service", Manage.GDPRPseudoAnonymise
     end
   end
 
@@ -458,6 +472,36 @@ defmodule TeiserverWeb.Router do
     post "/users/refresh_token", UserController, :refresh_token
   end
 
+  # Staff
+  scope "/staff", TeiserverWeb.StaffLive do
+    pipe_through([:live_browser, :app_layout, :protected, :tailwind])
+
+    live_session :staff_menu,
+      layout: {TeiserverWeb.Layouts, :public_tw},
+      on_mount: [
+        {Teiserver.Account.DefaultsPlug, {:set, %{site_menu_active: "staff"}}},
+        {UserAuthentication, :ensure_authenticated},
+        {UserAuthentication, {:authorise, "Staff"}}
+      ] do
+      live "/", Menu, :menu
+    end
+
+    live_session :staff_text_callbacks,
+      layout: {TeiserverWeb.Layouts, :public_tw},
+      on_mount: [
+        {Teiserver.Account.DefaultsPlug, {:set, %{site_menu_active: "staff"}}},
+        {UserAuthentication, :ensure_authenticated},
+        {UserAuthentication, {:authorise, "Staff"}}
+      ] do
+      live "/text_callbacks", TextCallback.List, :list
+      live "/text_callbacks/new", TextCallback.List, :new
+      live "/text_callbacks/:id/edit", TextCallback.List, :edit
+
+      live "/text_callbacks/:id", TextCallback.Show, :show
+      live "/text_callbacks/:id/show/edit", TextCallback.Show, :edit
+    end
+  end
+
   # ADMIN
   scope "/admin", TeiserverWeb.AdminDashLive, as: :ts do
     pipe_through([:browser, :app_layout, :protected])
@@ -473,6 +517,7 @@ defmodule TeiserverWeb.Router do
     live("/client/:id", Show, :show)
   end
 
+  # MODERATION
   scope "/moderation", TeiserverWeb.Moderation, as: :moderation do
     pipe_through([:browser, :app_layout, :protected])
 
@@ -536,11 +581,19 @@ defmodule TeiserverWeb.Router do
       ] do
       live "/users", User.List, :list
 
-      live "/users/:id", User.Show, :show
-      live "/users/:id/edit", User.Edit, :edit
+      live "/users/:id/smurf_search", User.SmurfSearch, :search
       live "/users/:id/clear_gdpr_forget", User.ClearGDPRForget
       live "/users/:id/set_gdpr_forget", User.SetGDPRForget
       live "/users/:id/smurf_link", User.SmurfLink, :show
+      live "/users/:id/relationships", User.Relationships, :show
+
+      live "/users/:id/edit/name", User.Show, :edit_name
+      live "/users/:id/edit/email", User.Show, :edit_email
+      live "/users/:id/edit/roles", User.Show, :edit_roles
+      live "/users/:id/new/note", User.Show, :new_note
+      live "/users/:id/edit/note/:user_note_id", User.Show, :edit_note
+      live "/users/:id", User.Show, :show
+      live "/users/:id/:tab", User.Show, :show
     end
 
     live_session :banned_ips,
@@ -611,22 +664,21 @@ defmodule TeiserverWeb.Router do
         {UserAuthentication, {:authorise, "Moderator"}}
       ] do
       live "/tools/time_compare", Tools.TimeCompare, :show
+      live "/tools/volume_chart", Tools.ModerationVolumeChart, :show
       live "/tools/gdpr_restore", Tools.GDPRRestoreWarning
       live "/tools/gdpr_restore/perform", Tools.GDPRRestorePerform
       live "/tools/gdpr_restore/success/:user_id", Tools.GDPRRestoreSuccess
     end
-  end
 
-  scope "/admin", TeiserverWeb.Admin, as: :admin do
-    pipe_through([:browser, :app_layout, :protected])
-
-    resources("/text_callbacks", TextCallbackController,
-      only: [:index, :new, :create, :show, :edit, :update, :delete]
-    )
-
-    resources("/discord_channels", DiscordChannelController,
-      only: [:index, :new, :create, :show, :edit, :update, :delete]
-    )
+    live_session :lobby_logs,
+      layout: {TeiserverWeb.Layouts, :moderation_tw},
+      on_mount: [
+        {Teiserver.Account.DefaultsPlug, {:set, %{site_menu_active: "moderation"}}},
+        {UserAuthentication, :ensure_authenticated},
+        {UserAuthentication, {:authorise, "Moderator"}}
+      ] do
+      live "/lobby_logs", LobbyLog.List, :list
+    end
   end
 
   scope "/teiserver/admin", TeiserverWeb.Admin, as: :admin do
@@ -635,9 +687,6 @@ defmodule TeiserverWeb.Router do
     # Codes
     resources("/codes", CodeController)
     put("/codes/extend/:id/:hours", CodeController, :extend)
-
-    # Config
-    resources("/site", SiteConfigController, only: [:index, :edit, :update, :delete])
   end
 
   scope "/chat", TeiserverWeb.Communication do
@@ -706,7 +755,6 @@ defmodule TeiserverWeb.Router do
         {UserAuthentication, {:authorise_any, ["Contributor", "Overwatch"]}}
       ] do
       live "/", Menu, :show
-      live "/palette", Palette, :show
     end
 
     live_session :admin_tools,
@@ -717,6 +765,36 @@ defmodule TeiserverWeb.Router do
         {UserAuthentication, {:authorise, "Admin"}}
       ] do
       live "/tools/mfa_usage", Tools.MFAUsage, :show
+      live "/tools/blog_activity", Tools.BlogActivity, :show
+      live "/tools/population_report", Tools.PopulationReport, :show
+    end
+
+    live_session :admin_discord_channels,
+      layout: {TeiserverWeb.Layouts, :admin_tw},
+      on_mount: [
+        {Teiserver.Account.DefaultsPlug, {:set, %{site_menu_active: "admin"}}},
+        {UserAuthentication, :ensure_authenticated},
+        {UserAuthentication, {:authorise, "Admin"}}
+      ] do
+      live "/discord_channels", DiscordChannel.List, :list
+      live "/discord_channels/new", DiscordChannel.List, :new
+      live "/discord_channels/:id/edit", DiscordChannel.List, :edit
+
+      live "/discord_channels/:id", DiscordChannel.Show, :show
+      live "/discord_channels/:id/show/edit", DiscordChannel.Show, :edit
+    end
+
+    live_session :admin_site_configs,
+      layout: {TeiserverWeb.Layouts, :admin_tw},
+      on_mount: [
+        {Teiserver.Account.DefaultsPlug, {:set, %{site_menu_active: "admin"}}},
+        {UserAuthentication, :ensure_authenticated},
+        {UserAuthentication, {:authorise, "Admin"}}
+      ] do
+      live "/site_config", SiteConfig.List, :list
+      live "/site_config/:key/edit", SiteConfig.List, :edit
+
+      live "/site_config/:key/history", SiteConfig.Show, :show
     end
   end
 
@@ -751,13 +829,7 @@ defmodule TeiserverWeb.Router do
 
     get("/metrics", GeneralController, :metrics)
 
-    get("/users/rename_form/:id", UserController, :rename_form)
-    put("/users/rename_post/:id", UserController, :rename_post)
-    get("/users/reset_password/:id", UserController, :reset_password)
     get("/users/relationships/:id", UserController, :relationships)
-    put("/users/:id/disable_totp", UserController, :disable_totp)
-    get("/users/action/:id/:action", UserController, :perform_action)
-    put("/users/action/:id/:action", UserController, :perform_action)
     get("/users/smurf_search/:id", UserController, :smurf_search)
     post("/users/create_smurf_key/:userid", UserController, :create_smurf_key)
 
@@ -769,14 +841,12 @@ defmodule TeiserverWeb.Router do
     delete("/users/delete_smurf_key/:id", UserController, :delete_smurf_key)
     get("/users/search", UserController, :index)
     post("/users/set_stat", UserController, :set_stat)
-    get("/users/data_search", UserController, :data_search)
-    post("/users/data_search", UserController, :data_search)
     post("/users/search", UserController, :search)
     get("/users/applying/:id", UserController, :applying)
     get("/users/ratings_form/:id", UserController, :ratings_form)
     post("/users/ratings_post/:id", UserController, :ratings_post)
     get("/users/ratings/:id", UserController, :ratings)
-    resources("/user", UserController)
+    resources("/user", UserController, only: [:index, :show])
 
     resources("/badge_types", BadgeTypeController)
     get("/accolades/user/:user_id", AccoladeController, :user_show)

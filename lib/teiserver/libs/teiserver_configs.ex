@@ -3,9 +3,9 @@ defmodule Teiserver.TeiserverConfigs do
 
   alias Teiserver.Account
   alias Teiserver.Lobby
+  alias Teiserver.Matchmaking
   alias Teiserver.Party
   alias Teiserver.Player.LoginQueue
-  alias Teiserver.Tachyon
 
   import Teiserver.Config, only: [add_site_config_type: 1]
 
@@ -715,9 +715,9 @@ defmodule Teiserver.TeiserverConfigs do
   end
 
   defp tachyon_configs do
-    Tachyon.setup_site_configs()
     Party.setup_site_configs()
     LoginQueue.setup_site_configs()
+    Matchmaking.setup_site_configs()
     :ok
   end
 end

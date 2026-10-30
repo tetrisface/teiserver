@@ -1,9 +1,9 @@
 defmodule Teiserver.SpringAuthTest do
   alias Teiserver.Account
   alias Teiserver.Account.Auth
-  alias Teiserver.Account.UserCacheLib
+  alias Teiserver.Account.Login
+  alias Teiserver.Account.Registration
   alias Teiserver.BitParse
-  alias Teiserver.CacheUser
   alias Teiserver.Client
   alias Teiserver.TeiserverTestLib
   use Teiserver.ServerCase, async: false
@@ -436,9 +436,9 @@ CLIENTS test_room #{user.name}\n"
     _recv_raw(socket)
 
     # Check our starting situation
-    assert UserCacheLib.deprecated_get_user_by_name(new_name) == nil
-    assert %{name: ^old_name} = UserCacheLib.deprecated_get_user_by_name(old_name)
-    assert %{id: ^userid} = UserCacheLib.deprecated_get_user_by_id(userid)
+    assert Account.get_user_by_name(new_name) == nil
+    assert %{name: ^old_name} = Account.get_user_by_name(old_name)
+    assert %{id: ^userid} = Account.get_user_by_id(userid)
     assert %{userid: ^userid} = Client.get_client_by_id(userid)
 
     # Rename with an invalid name
@@ -458,7 +458,7 @@ CLIENTS test_room #{user.name}\n"
     _send_raw(socket, "RENAMEACCOUNT test_user_rename\n")
     reply = _recv_raw(socket)
     # assert reply == "SERVERMSG Username change in progress, please log back in in 5 seconds\n"
-    assert reply == :timeout
+    assert reply in [:timeout, "s.system.disconnect Logged out\n"]
 
     # Check they got logged out
     wreply = _recv_raw(watcher)
@@ -504,7 +504,7 @@ CLIENTS test_room #{user.name}\n"
     )
 
     # Un-flood them
-    CacheUser.set_flood_level(userid, 0)
+    Login.set_flood_level(userid, 0)
     # And re-verify them
     Account.verify_user(userid)
 
@@ -564,57 +564,6 @@ CLIENTS test_room #{user.name}\n"
              "SERVERMSG No incomming match for CREATEBOTACCOUNT with data '\"nomatchname\"'. Userid #{user.id}\n"
   end
 
-  # test "c.moderation.report", %{socket: socket, user: user} do
-  #   _send_raw(
-  #     socket,
-  #     "c.moderation.report_user bad_name_here location_type nil reason with spaces\n"
-  #   )
-  #   reply = _recv_raw(socket)
-  #   assert reply =~ "NO cmd=c.moderation.report_user\tbad command format\n"
-
-  #   _send_raw(socket, "c.moderation.report_user bad_name_here\n")
-  #   reply = _recv_raw(socket)
-  #   assert reply =~ "NO cmd=c.moderation.report_user\tbad command format\n"
-
-  #   _send_raw(
-  #     socket,
-  #     "c.moderation.report_user bad_name_here\tlocation_type\tnil\treason with spaces\n"
-  #   )
-  #   reply = _recv_raw(socket)
-  #   assert reply =~ "NO cmd=c.moderation.report_user\tno target user\n"
-  #   assert reply =~
-  #     "OK\nSAIDPRIVATE Coordinator To complete your report, please use the form on this link:"
-
-  #   # Now we do it correctly, first without a location id
-  #   target_user = new_user()
-  #   assert Enum.count(Account.list_reports(search: [filter: {"target", target_user.id}])) == 0
-  #   _send_raw(socket, "c.moderation.report_user #{target_user.name}\tlocation_type\tnil\treason with spaces\n")
-  #   reply = _recv_raw(socket)
-  #   assert reply == "OK\n"
-  #   assert Enum.count(Account.list_reports(search: [filter: {"target", target_user.id}])) == 1
-
-  #   # Next, with one
-  #   _send_raw(socket, "c.moderation.report_user #{target_user.name}\tlocation_type\t123\treason with spaces\n")
-  #   reply = _recv_raw(socket)
-  #   assert reply == "OK\n"
-  #   assert Enum.count(Account.list_reports(search: [filter: {"target", target_user.id}])) == 2
-
-  #   # Finally, put in a bad location ID and expect to get a database error back
-  #   _send_raw(socket, "c.moderation.report_user #{target_user.name}\tlocation_type\tlocation_id\treason with spaces\n")
-  #   reply = _recv_raw(socket)
-  #   assert reply == "NO cmd=c.moderation.report_user\tdatabase error\n"
-  #   assert Enum.count(Account.list_reports(search: [filter: {"target", target_user.id}])) == 2
-
-  #   # Reporting a friend
-  #   CacheUser.create_friend_request(user.id, target_user.id)
-  #   CacheUser.accept_friend_request(user.id, target_user.id)
-
-  #   _send_raw(socket, "c.moderation.report_user #{target_user.name}\tlocation_type\t123\treason with spaces\n")
-  #   reply = _recv_raw(socket)
-  #   assert reply =~ "NO cmd=c.moderation.report_user\treporting friend\n"
-  #   assert Enum.count(Account.list_reports(search: [filter: {"target", target_user.id}])) == 2
-  # end
-
   test "User age", context do
     user = new_user("test_user_rank", %{"rank" => 5})
     %{socket: socket} = auth_setup(context, user)
@@ -628,21 +577,16 @@ CLIENTS test_room #{user.name}\n"
 
   test "Bad id ADDUSER", %{user: user, socket: socket} do
     {:ok, bad_user} =
-      CacheUser.user_register_params_with_md5(
+      Registration.user_register_params_with_md5(
         "test_bad_id",
         "test_user_bad_id@email.com",
         Account.spring_md5_password("password")
       )
       |> Account.create_user()
 
-    bad_user
-    |> UserCacheLib.convert_user()
-    |> UserCacheLib.add_user()
-
     Account.verify_user(bad_user.id)
 
-    # Need to add it as a client for the :add_user command to work
-    bad_user.id |> CacheUser.deprecated_get_user_by_id() |> Client.login(:spring, "127.0.0.1")
+    bad_user.id |> Account.get_user_by_id() |> Client.login(:spring, "127.0.0.1")
 
     # Now see what happens when we add user
     pid = Client.get_client_by_id(user.id).tcp_pid

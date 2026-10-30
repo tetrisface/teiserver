@@ -35,7 +35,7 @@ defmodule TeiserverWeb.ModerationLive.Menu do
 
       <.menu_page_link
         :if={allow_any?(@current_user, ~w(Reviewer))}
-        icon={Teiserver.Chat.LobbyMessageLib.icon()}
+        icon={Teiserver.Chat.SpringLobbyMessageLib.icon()}
         url={~p"/admin/chat"}
       >
         Chat
@@ -55,6 +55,14 @@ defmodule TeiserverWeb.ModerationLive.Menu do
         url={~p"/moderation/users"}
       >
         Users
+      </.menu_page_link>
+
+      <.menu_page_link
+        :if={allow?(@scope, "Moderator")}
+        icon="user"
+        url={~p"/teiserver/admin/user"}
+      >
+        Users (Old)
       </.menu_page_link>
 
       <.menu_page_link
@@ -82,6 +90,14 @@ defmodule TeiserverWeb.ModerationLive.Menu do
       </.menu_page_link>
 
       <.menu_page_link
+        :if={allow?(@scope, "Moderator")}
+        icon="door-open"
+        url={~p"/moderation/lobby_logs"}
+      >
+        Lobby logs
+      </.menu_page_link>
+
+      <.menu_page_link
         :if={allow?(@current_user, "Senior moderator")}
         icon="person-burst"
         url={~p"/moderation/anti-abuse-records"}
@@ -97,6 +113,14 @@ defmodule TeiserverWeb.ModerationLive.Menu do
         url={~p"/moderation/tools/time_compare"}
       >
         Time compare
+      </.menu_page_link>
+
+      <.menu_page_link
+        :if={allow?(@scope, "Moderator")}
+        icon="chart-line"
+        url={~p"/moderation/tools/volume_chart"}
+      >
+        Volume chart
       </.menu_page_link>
 
       <.menu_page_link

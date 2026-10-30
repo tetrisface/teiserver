@@ -185,7 +185,7 @@
 }
 
 .single-block-content {
-  @apply w-full max-w-4xl px-4 mx-auto mt-15 rounded-md;
+  @apply w-full max-w-4xl px-4 mx-auto mt-30 rounded-md;
 }
 
 .list-title-item {
@@ -196,9 +196,24 @@
   @apply text-sm leading-6 text-neutral/80 dark:text-neutral-content/80
 }
 
+.user-note-contents li {
+  @apply ml-4 list-disc;
+}
+
 /* Apex charts dark mode */
 .apexcharts-text, .apexcharts-menu-item, .apexcharts-legend-text {
   /* The legend doesn't apply as the style is being manually overriden by a style attribute I've not yet worked out how to remove */
   @apply dark:fill-neutral-content dark:text-neutral;
 }
 
+.apexchart-container {
+  @apply w-full h-100 mb-8;
+}
+
+.data-explain {
+  @apply rounded-md bg-info/25 p-4;
+}
+
+.btn-close {
+  cursor: pointer;
+}
